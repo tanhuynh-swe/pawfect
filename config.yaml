@@ -1,0 +1,155 @@
+# Pawfect Love Animals — pipeline configuration
+# Everything here is free-tier. Keys go in .env, never in this file.
+
+channel:
+  handle: "@PawfectLoveAnimals"
+  name: "Pawfect Love Animals"
+  # Your own angle. This is the single most important line in the file:
+  # it is what keeps the channel out of YouTube's "mass-produced" bucket.
+  # Rewrite it in your own words once you know what your audience likes.
+  angle: >
+    Practical, evidence-based pet care explained calmly for first-time owners,
+    with the vet consensus stated plainly and the common myths named and corrected.
+  target_language: en
+  # Long-form only, per your choice.
+  target_minutes: [6, 9]
+
+# TikTok Shop affiliate links (auto-added to TikTok video descriptions)
+affiliate:
+  enabled: true
+  disclosure: "🤝 We earn commissions from affiliate links — it doesn't cost you more."
+  template: |
+    📦 Products mentioned:
+    [Add Chewy, Amazon, or pet brand affiliate links here]
+
+    {disclosure}
+  # Add product categories relevant to each video
+  categories:
+    - dog food
+    - cat food
+    - pet toys
+    - grooming supplies
+    - pet health
+
+video:
+  width: 1920
+  height: 1080
+  fps: 30
+  # Seconds each visual stays on screen before cutting to the next.
+  # Lower = more visual variety = better retention. Do not go below 3.
+  max_shot_seconds: 6.5
+  crossfade_seconds: 0.4
+  music_volume: 0.06        # narration must dominate
+  narration_lufs: -16       # YouTube's normalization target
+  burn_captions: false      # Skip caption burn-in (ffmpeg libass issue)
+
+# Vertical format, used automatically by any script with "format": "vertical".
+# Anything not listed here falls back to the `video` block above.
+shorts:
+  width: 1080
+  height: 1920
+  # Far shorter shots than long-form: vertical viewers leave in seconds, and
+  # a static frame is the fastest way to lose them.
+  max_shot_seconds: 2.8
+  caption_size: 74          # readable on a phone at arm's length
+  banner_size: 88
+  caption_margin_v: 380     # clear of the Shorts/TikTok UI along the bottom
+  side_margin: 70
+  # Poppins has no Vietnamese diacritics; this one does. Only matters once
+  # ffmpeg can burn subtitles (needs libass).
+  font_vi: "Arial Unicode MS"
+  # A Short must stay under 3 minutes to qualify. Pure hook content wants
+  # under 60s, but a tutorial that has to include a safety warning runs
+  # 80-110s and still holds up, so the warning band is set wider than the
+  # advice you will read elsewhere.
+  target_seconds: [40, 110]
+
+voice:
+  # edge   = free, nothing to download, more natural voice, needs internet
+  # piper  = free, fully offline after a one-time 60MB model download
+  # If the chosen engine fails, the other is tried automatically.
+  engine: edge
+  piper_voice: en_US-lessac-medium
+  piper_speed: 0.8          # 0.8 = slower, more natural; 1.0 = normal
+  # The Multilingual voices are Microsoft's newer generation and sound far
+  # more human than the older ones like AriaNeural — better sentence rhythm,
+  # less of the flat "announcer" cadence. Run `python run.py voicetest` to
+  # hear the candidates side by side and put your favourite here.
+  edge_voice: en-US-AvaMultilingualNeural
+  # Per-language voices. A script with "language": "vi" uses the vi entry.
+  # Check them by ear first with: python run.py voicetest
+  voices:
+    en: en-US-AvaMultilingualNeural
+    vi: vi-VN-NamMinhNeural
+  # A touch slower than default reads as considered rather than rushed.
+  edge_rate: "-2%"
+  edge_pitch: "+0Hz"
+  sentence_silence: 0.45
+
+visuals:
+  # Tried in order. pexels and pixabay need a free API key and give the best
+  # footage; wikimedia needs nothing at all and keeps the pipeline working out
+  # of the box. Leave all three on: adding keys later upgrades the footage
+  # automatically, with no config change.
+  providers: [pexels, pixabay, wikimedia]
+  orientation: landscape
+  min_width: 1920
+  # Per-scene fallback if no stock clip matches the query.
+  fallback_query: "dog cat pet"
+
+script:
+  # api    = call Claude via ANTHROPIC_API_KEY (paid, but pennies per video)
+  # manual = write a prompt file for you to paste into the Claude app (free)
+  # Auto mode requires 'api' — a paste step cannot run unattended.
+  mode: api
+  model: claude-sonnet-4-6
+  words_per_minute: 150
+
+research:
+  # How many topic candidates to score per run.
+  candidates_per_run: 12
+  # Wikipedia is used only to ground facts; never copied verbatim.
+  wikipedia_lang: en
+
+upload:
+  # Used when publishing immediately (auto mode). YouTube forces this to
+  # 'private' anyway until your API project passes its compliance audit.
+  privacy: public
+  category_id: "15"         # Pets & Animals
+  made_for_kids: false
+  # Set true only if a video contains realistic synthetic imagery of
+  # real people/events. AI narration over stock footage does NOT need it.
+  contains_synthetic_media: false
+  # Publish slots, local time, used when scheduling a batch.
+  schedule:
+    days: [tuesday, thursday, saturday]
+    hour: 17
+    minute: 0
+  default_tags:
+    - pet care
+    - dog care
+    - cat care
+    - pet health
+    - first time pet owner
+
+safety:
+  # Applies to `run.py publish` only. `run.py auto` uses the automated gate
+  # below instead, so leave this true — it protects your manual workflow
+  # without affecting the unattended one.
+  require_human_review: true
+
+  # --- automated gate, used by `run.py auto` ---
+
+  # Every auto-run video is checked by Claude for invented statistics, unsafe
+  # advice, and overconfident claims before it publishes. Turning this off
+  # means nothing at all reviews your videos. Don't.
+  auto_review: true
+
+  # Maximum trigram similarity against your own published scripts.
+  # Above this the video is held. This is the check that maps directly onto
+  # YouTube's "mass-produced or repetitive content" policy.
+  max_repetition: 0.30
+
+  # Stop publishing automatically if this many consecutive runs get held.
+  # A run of holds usually means something upstream broke.
+  max_consecutive_holds: 3

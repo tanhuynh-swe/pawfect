@@ -1,0 +1,66 @@
+# Seed topics for Pawfect Love Animals.
+# `research.py` scores these against real YouTube search demand and picks the
+# best unused one. Add your own freely — one line each. Keep them specific:
+# "Why dogs eat grass" beats "dog facts".
+#
+# wiki: optional Wikipedia article title used to ground the facts.
+
+- title: "Why does my dog eat grass?"
+  wiki: "Dog behavior"
+  angle: "Three real explanations, and the one warning sign that means call the vet."
+
+- title: "How much should I actually feed my cat each day?"
+  wiki: "Cat food"
+  angle: "Portion math by body weight, and why the bag's instructions overfeed."
+
+- title: "Why do cats knead you with their paws?"
+  wiki: "Cat behavior"
+  angle: "The kitten reflex behind it and what it says about trust."
+
+- title: "Signs your dog is in pain but hiding it"
+  wiki: "Dog health"
+  angle: "The quiet behavioural changes owners miss for weeks."
+
+- title: "How often should you really bathe a dog?"
+  wiki: "Dog grooming"
+  angle: "Why over-bathing causes the smell people are trying to remove."
+
+- title: "Is my cat drinking too much water?"
+  wiki: "Polydipsia"
+  angle: "The measurable threshold that separates normal from a vet visit."
+
+- title: "Human foods that are dangerous for dogs"
+  wiki: "Chocolate poisoning"
+  angle: "Ranked by how much it takes to actually hurt a dog of each size."
+
+- title: "Why does my dog follow me everywhere?"
+  wiki: "Dog behavior"
+  angle: "Normal bonding versus separation anxiety, and how to tell them apart."
+
+- title: "How to introduce a new cat to your existing cat"
+  wiki: "Cat behavior"
+  angle: "The two-week scent protocol that prevents lifelong hostility."
+
+- title: "What your dog's sleeping position means"
+  wiki: "Dog anatomy"
+  angle: "What is genuinely known, and which viral claims have no evidence."
+
+- title: "Why is my cat throwing up so often?"
+  wiki: "Hairball"
+  angle: "Frequency thresholds: what is normal, what needs a vet this week."
+
+- title: "How long can you leave a dog alone at home?"
+  wiki: "Dog training"
+  angle: "By age and breed, with the bladder math nobody explains."
+
+- title: "Do cats actually recognise their own name?"
+  wiki: "Cat intelligence"
+  angle: "What the 2019 Saito study found, and what it did not."
+
+- title: "Why do dogs tilt their heads?"
+  wiki: "Dog cognition"
+  angle: "Hearing, vision, and the surprising link to word learning."
+
+- title: "The right way to trim a dog's nails without hurting them"
+  wiki: "Dog grooming"
+  angle: "Finding the quick on dark nails, and what to do if you cut it."
