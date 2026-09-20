@@ -12,6 +12,7 @@ rendering pipeline without any audio setup.
 """
 from __future__ import annotations
 
+import re
 import shutil
 import time
 import subprocess
@@ -54,12 +55,61 @@ def _piper(text: str, out: Path, cfg: dict[str, Any]) -> None:
     )
 
 
-def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
-    """Microsoft's free endpoint, which rate-limits a rapid run of requests.
+# No speech is intelligible above this rate, so a clip shorter than
+# len(text) / this is proof the endpoint dropped audio, not a fast read.
+_MAX_CHARS_PER_SECOND = 25.0
 
-    A 20-scene script fires 20 calls in under a minute and the service starts
-    refusing partway through, so each scene gets a few patient retries before
-    the build is allowed to fail.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?…])\s+")
+
+
+def _sentences(text: str) -> list[str]:
+    parts = [p.strip() for p in _SENTENCE_BREAK.split(text) if p.strip()]
+    return parts or [text.strip()]
+
+
+_SILENCE_EDGE = (
+    "silenceremove=start_periods=1:start_duration=0:start_threshold=-50dB"
+    ":detection=peak"
+)
+
+
+def _trim_silence(path: Path) -> None:
+    """Strip leading and trailing silence from a clip.
+
+    edge-tts pads what it returns with roughly a quarter second of silence at
+    the head and close to a second at the tail. Joined end to end those pads
+    stack into over a second of dead air, which is heard as the narration
+    stopping and restarting rather than as a pause between sentences.
+    """
+    trimmed = path.with_name(path.stem + "_trim.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
+         "-af", f"{_SILENCE_EDGE},areverse,{_SILENCE_EDGE},areverse",
+         "-ar", "22050", "-ac", "1", str(trimmed)],
+        check=True,
+    )
+    trimmed.replace(path)
+
+
+def _pad_tail(path: Path, seconds: float) -> None:
+    """Give a scene a deliberate tail so the next one does not run into it."""
+    padded = path.with_name(path.stem + "_pad.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
+         "-af", f"apad=pad_dur={seconds}",
+         "-ar", "22050", "-ac", "1", str(padded)],
+        check=True,
+    )
+    padded.replace(path)
+
+
+def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
+    """One sentence through Microsoft's free endpoint, verified on arrival.
+
+    The endpoint streams the clip back in chunks and will sometimes end the
+    stream early, leaving a file that plays fine but is missing its tail. That
+    truncation is what is audible as narration cutting out mid-sentence, so a
+    clip too short for its text is rejected and asked for again.
     """
     # Invoked through the interpreter so it always resolves to the venv's copy.
     # `--rate=-4%` uses the '=' form: as a separate argument, a value starting
@@ -73,51 +123,86 @@ def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
         f"--text={text}",
         f"--write-media={mp3}",
     ]
+    floor = len(text) / _MAX_CHARS_PER_SECOND
     delays = [0, 3, 8, 20]
     last_error = ""
     for attempt, wait in enumerate(delays, start=1):
         if wait:
             time.sleep(wait)
+        mp3.unlink(missing_ok=True)
+        out.unlink(missing_ok=True)
         try:
             subprocess.run(cmd, check=True, capture_output=True, text=True)
-            if mp3.exists() and mp3.stat().st_size > 500:
-                break
-            last_error = "empty audio returned"
+            if not (mp3.exists() and mp3.stat().st_size > 500):
+                last_error = "empty audio returned"
+            else:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3),
+                     "-ar", "22050", "-ac", "1", str(out)],
+                    check=True,
+                )
+                _trim_silence(out)
+                if duration(out) >= floor:
+                    mp3.unlink(missing_ok=True)
+                    return
+                last_error = "truncated audio returned"
         except subprocess.CalledProcessError as exc:
             detail = (exc.stderr or exc.stdout or "").strip()
             last_error = detail.splitlines()[-1] if detail else f"exit {exc.returncode}"
         if attempt < len(delays):
             print(f"      retrying ({last_error[:70]})")
-    else:
-        raise RuntimeError(f"edge-tts failed after {len(delays)} tries: {last_error}")
+    mp3.unlink(missing_ok=True)
+    raise RuntimeError(f"edge-tts failed after {len(delays)} tries: {last_error}")
+
+
+def _join(parts: list[Path], out: Path, gap: float) -> None:
+    """Concatenate clips with `gap` seconds of silence between them."""
+    if len(parts) == 1:
+        shutil.move(str(parts[0]), str(out))
+        return
+    work = parts[0].parent
+    silence = work / "_gap.wav"
     subprocess.run(
-        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3),
-         "-ar", "22050", "-ac", "1", str(out)],
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+         "-i", "anullsrc=r=22050:cl=mono", "-t", f"{gap}", str(silence)],
         check=True,
     )
-    mp3.unlink(missing_ok=True)
+    entries: list[str] = []
+    for i, part in enumerate(parts):
+        if i:
+            entries.append(f"file '{silence.resolve()}'")
+        entries.append(f"file '{part.resolve()}'")
+    listfile = work / "_join.txt"
+    listfile.write_text("\n".join(entries), encoding="utf-8")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
+         "-i", str(listfile), "-c", "copy", str(out)],
+        check=True,
+    )
 
 
-def _gtts(text: str, out: Path, cfg: dict[str, Any]) -> None:
-    """Google Text-to-Speech. Free, reliable for all languages including Vietnamese."""
-    from gtts import gTTS
+def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
+    """Microsoft's free endpoint, one sentence per request.
 
-    lang = cfg["voice"].get("voices", {}).get("vi", "vi") if "language" in cfg else "en"
-    speed_multiplier = cfg["voice"].get("gtts_speed", 1.0)
-
-    mp3 = out.with_suffix(".mp3")
+    A whole scene in one request is a long stream, and the longer the stream
+    the likelier the endpoint ends it early. Sentence-sized requests largely
+    avoid that, confine a retry to the sentence that needs one, and give the
+    pause between sentences a real duration rather than whatever the endpoint
+    happened to leave behind.
+    """
+    work = out.parent / f"_{out.stem}_parts"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True, exist_ok=True)
     try:
-        tts = gTTS(text=text, lang=lang, slow=(speed_multiplier < 0.9))
-        tts.save(str(mp3))
-
-        subprocess.run(
-            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3),
-             "-ar", "22050", "-ac", "1", str(out)],
-            check=True,
-        )
-        mp3.unlink(missing_ok=True)
-    except Exception as e:
-        raise RuntimeError(f"Google TTS failed: {str(e)}")
+        parts = []
+        for i, sentence in enumerate(_sentences(text)):
+            part = work / f"{i:02d}.wav"
+            _edge_sentence(sentence, part, cfg)
+            parts.append(part)
+        _join(parts, out, cfg["voice"].get("sentence_silence", 0.35))
+        _pad_tail(out, cfg["voice"].get("scene_gap", 0.25))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def _estimate(text: str, out: Path, cfg: dict[str, Any]) -> None:
@@ -130,13 +215,12 @@ def _estimate(text: str, out: Path, cfg: dict[str, Any]) -> None:
     )
 
 
-ENGINES = {"gtts": _gtts, "piper": _piper, "edge": _edge, "estimate": _estimate}
+ENGINES = {"piper": _piper, "edge": _edge, "estimate": _estimate}
 
 # If the configured engine fails, these are tried in order before giving up.
-# gtts is Google TTS (free, reliable for all languages including Vietnamese)
-# edge needs internet but is undocumented and can fail for some languages
-# piper needs a one-time 60MB model download but works offline
-FALLBACKS = ["gtts", "edge", "piper"]
+# Piper needs a one-time 60MB model download; edge needs none but needs
+# internet on every run. Between them, one almost always works.
+FALLBACKS = ["edge", "piper"]
 
 
 def pick_engine(cfg: dict[str, Any], out_dir: Path) -> str:

@@ -74,6 +74,28 @@ def _shot(src: Path, dest: Path, seconds: float, cfg: dict[str, Any],
     ])
 
 
+def _shot_is_current(dest: Path, seconds: float, cfg: dict[str, Any]) -> bool:
+    """True when `dest` already holds a shot of the right length.
+
+    Shot lengths are derived from the narration, so refreshing the audio
+    changes them. Reusing a shot cut for the previous audio desynchronises the
+    visuals from the voice and leaves the video shorter than the narration,
+    which -shortest then silently truncates.
+    """
+    if not dest.exists():
+        return False
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", str(dest)],
+        capture_output=True, text=True,
+    )
+    try:
+        have = float(probe.stdout.strip())
+    except ValueError:
+        return False
+    return abs(have - seconds) <= 1.5 / float(cfg["video"]["fps"])
+
+
 def build_shots(scenes: list[dict[str, Any]], durations: list[float],
                 cfg: dict[str, Any], out_dir: Path) -> list[Path]:
     shots_dir = out_dir / "shots"
@@ -87,13 +109,18 @@ def build_shots(scenes: list[dict[str, Any]], durations: list[float],
         per = dur / n
         for k in range(n):
             dest = shots_dir / f"{counter:04d}.mp4"
-            if cfg.get("_refresh") or not dest.exists():
+            if cfg.get("_refresh") or not _shot_is_current(dest, per, cfg):
                 clip = fetch_clip(
                     scene.get("visual_query", ""), counter, per, cfg, out_dir
                 )
                 _shot(clip, dest, per, cfg, counter)
             paths.append(dest)
             counter += 1
+
+    # Shots left over from a build that needed more of them would otherwise sit
+    # here and be picked up as though they belonged to this one.
+    for stale in sorted(shots_dir.glob("*.mp4"))[counter:]:
+        stale.unlink()
     return paths
 
 
