@@ -65,10 +65,11 @@ shorts:
   target_seconds: [40, 110]
 
 voice:
+  # gtts  = Google TTS - free, reliable, works offline after cache
   # edge   = free, nothing to download, more natural voice, needs internet
   # piper  = free, fully offline after a one-time 60MB model download
   # If the chosen engine fails, the other is tried automatically.
-  engine: edge
+  engine: gtts
   piper_voice: en_US-lessac-medium
   piper_speed: 0.8          # 0.8 = slower, more natural; 1.0 = normal
   # The Multilingual voices are Microsoft's newer generation and sound far
@@ -79,12 +80,13 @@ voice:
   # Per-language voices. A script with "language": "vi" uses the vi entry.
   # Check them by ear first with: python run.py voicetest
   voices:
-    en: en-US-AvaMultilingualNeural
-    vi: vi-VN-HoaiMyNeural
+    en: en
+    vi: vi
   # A touch slower than default reads as considered rather than rushed.
-  edge_rate: "-5%"
-  edge_pitch: "+10Hz"
-  sentence_silence: 0.6
+  edge_rate: "-10%"
+  edge_pitch: "+0Hz"
+  sentence_silence: 0.5
+  gtts_speed: 0.9  # 0.9 = slower (slower is better for non-English)
 
 visuals:
   # Tried in order. pexels and pixabay need a free API key and give the best

@@ -98,6 +98,28 @@ def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
     mp3.unlink(missing_ok=True)
 
 
+def _gtts(text: str, out: Path, cfg: dict[str, Any]) -> None:
+    """Google Text-to-Speech. Free, reliable for all languages including Vietnamese."""
+    from gtts import gTTS
+
+    lang = cfg["voice"].get("voices", {}).get("vi", "vi") if "language" in cfg else "en"
+    speed_multiplier = cfg["voice"].get("gtts_speed", 1.0)
+
+    mp3 = out.with_suffix(".mp3")
+    try:
+        tts = gTTS(text=text, lang=lang, slow=(speed_multiplier < 0.9))
+        tts.save(str(mp3))
+
+        subprocess.run(
+            ["ffmpeg", "-y", "-loglevel", "error", "-i", str(mp3),
+             "-ar", "22050", "-ac", "1", str(out)],
+            check=True,
+        )
+        mp3.unlink(missing_ok=True)
+    except Exception as e:
+        raise RuntimeError(f"Google TTS failed: {str(e)}")
+
+
 def _estimate(text: str, out: Path, cfg: dict[str, Any]) -> None:
     words = max(1, len(text.split()))
     seconds = round(words / (cfg["script"]["words_per_minute"] / 60), 2) + 0.4
@@ -108,12 +130,13 @@ def _estimate(text: str, out: Path, cfg: dict[str, Any]) -> None:
     )
 
 
-ENGINES = {"piper": _piper, "edge": _edge, "estimate": _estimate}
+ENGINES = {"gtts": _gtts, "piper": _piper, "edge": _edge, "estimate": _estimate}
 
 # If the configured engine fails, these are tried in order before giving up.
-# Piper needs a one-time 60MB model download; edge needs none but needs
-# internet on every run. Between them, one almost always works.
-FALLBACKS = ["edge", "piper"]
+# gtts is Google TTS (free, reliable for all languages including Vietnamese)
+# edge needs internet but is undocumented and can fail for some languages
+# piper needs a one-time 60MB model download but works offline
+FALLBACKS = ["gtts", "edge", "piper"]
 
 
 def pick_engine(cfg: dict[str, Any], out_dir: Path) -> str:
