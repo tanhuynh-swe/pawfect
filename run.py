@@ -120,13 +120,13 @@ def cmd_build(args, cfg) -> None:
     print(f"  {len(shots)} shots")
 
     print("\n[3/5] captions")
-    captions = render.build_captions(scenes, durations, cfg, out)
+    overlay = render.build_caption_overlay(scenes, durations, cfg, out)
     srt = render.build_srt(scenes, durations, out)
     print(f"  {srt.name} written for YouTube's caption track")
 
     print("\n[4/5] render")
     silent = render.concat_shots(shots, out)
-    final = render.finalize(silent, narration, captions, cfg, out)
+    final = render.finalize(silent, narration, overlay, cfg, out)
     size_mb = final.stat().st_size / 1e6
     print(f"  {final}  ({size_mb:.0f} MB)")
 

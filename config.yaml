@@ -41,7 +41,9 @@ video:
   crossfade_seconds: 0.4
   music_volume: 0.06        # narration must dominate
   narration_lufs: -16       # YouTube's normalization target
-  burn_captions: false      # Skip caption burn-in (ffmpeg libass issue)
+  # Captions are drawn with Pillow and composited, so this no longer depends
+  # on the ffmpeg build having libass.
+  burn_captions: true
 
 # Vertical format, used automatically by any script with "format": "vertical".
 # Anything not listed here falls back to the `video` block above.
@@ -55,8 +57,8 @@ shorts:
   banner_size: 88
   caption_margin_v: 380     # clear of the Shorts/TikTok UI along the bottom
   side_margin: 70
-  # Poppins has no Vietnamese diacritics; this one does. Only matters once
-  # ffmpeg can burn subtitles (needs libass).
+  # Kept for reference: the Vietnamese font is now chosen by render.py from
+  # CAPTION_FONTS_VI, since captions are drawn with Pillow rather than libass.
   font_vi: "Arial Unicode MS"
   # A Short must stay under 3 minutes to qualify. Pure hook content wants
   # under 60s, but a tutorial that has to include a safety warning runs
