@@ -83,7 +83,9 @@ voice:
   voices:
     en: en-US-AvaMultilingualNeural
     vi: vi-VN-NamMinhNeural
-    zh: zh-CN-XiaoxiaoNeural
+    # Traditional Chinese, for Taiwan and Hong Kong. Mainland China is not
+    # reachable through TikTok at all, so no Simplified voice is configured.
+    zh-TW: zh-TW-HsiaoChenNeural
   # A touch slower than default reads as considered rather than rushed.
   edge_rate: "-2%"
   edge_pitch: "+0Hz"

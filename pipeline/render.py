@@ -251,8 +251,11 @@ CAPTION_FONTS_ZH = [
 
 
 def _caption_font(size: int, language: str) -> ImageFont.FreeTypeFont:
+    # Matched on the base tag, so a regional code like zh-TW still finds the
+    # CJK list rather than falling through to fonts with no CJK glyphs at all.
+    base = language.split("-")[0].lower()
     fonts = {"vi": CAPTION_FONTS_VI, "zh": CAPTION_FONTS_ZH}.get(
-        language, CAPTION_FONTS
+        base, CAPTION_FONTS
     )
     for path in fonts:
         if Path(path).exists():
