@@ -165,13 +165,17 @@ def upload_video(video: Path, script: dict[str, Any], cfg: dict[str, Any],
     if publish_at:
         status["publishAt"] = publish_at
 
+    # The script's own language, not the channel's: a Vietnamese script routed
+    # here would otherwise be published labelled as English.
+    language = script.get("language", cfg["channel"]["target_language"])
+
     body = {
         "snippet": {
             "title": script["title"][:100],
             "description": script["description"][:5000],
             "tags": tags,
             "categoryId": str(cfg["upload"]["category_id"]),
-            "defaultLanguage": cfg["channel"]["target_language"],
+            "defaultLanguage": language,
         },
         "status": status,
     }
@@ -213,8 +217,8 @@ def upload_video(video: Path, script: dict[str, Any], cfg: dict[str, Any],
                 part="snippet",
                 body={"snippet": {
                     "videoId": video_id,
-                    "language": cfg["channel"]["target_language"],
-                    "name": "English",
+                    "language": language,
+                    "name": language,
                     "isDraft": False,
                 }},
                 media_body=MediaFileUpload(str(srt), mimetype="application/octet-stream"),
