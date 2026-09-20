@@ -80,11 +80,11 @@ voice:
   # Check them by ear first with: python run.py voicetest
   voices:
     en: en-US-AvaMultilingualNeural
-    vi: vi-VN-NamMinhNeural
+    vi: vi-VN-HoaiMyNeural
   # A touch slower than default reads as considered rather than rushed.
-  edge_rate: "-2%"
-  edge_pitch: "+0Hz"
-  sentence_silence: 0.45
+  edge_rate: "-5%"
+  edge_pitch: "+10Hz"
+  sentence_silence: 0.6
 
 visuals:
   # Tried in order. pexels and pixabay need a free API key and give the best
