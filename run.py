@@ -192,11 +192,11 @@ def cmd_publish(args, cfg) -> None:
     if destination == "tiktok":
         print(f"\n[publish to TikTok]")
         print(f"Uploading: {data['title']}")
-        upload_info = tiktok_upload.upload_video(final, data)
-        video_id = tiktok_upload.publish_video(upload_info["upload_id"], data, args.at)
-        tiktok_upload.record(video_id, out)
+        if args.at:
+            print("  note: a draft cannot be scheduled — post it from the app.")
+        publish_id = tiktok_upload.send_to_inbox(final, data)
+        tiktok_upload.record(publish_id, out)
         research.mark_used(args.slug)
-        print(f"Published to TikTok with video ID: {video_id}")
     else:
         # YouTube
         taken = [
@@ -393,6 +393,11 @@ def cmd_tiktok(args, cfg) -> None:
     )
 
 
+def cmd_tiktokauth(args, cfg) -> None:
+    """One-time TikTok login. Uploading is granted per account, not per app."""
+    tiktok_upload.authorize()
+
+
 def cmd_reauth(args, cfg) -> None:
     upload.reauthorise()
 
@@ -485,14 +490,13 @@ def cmd_auto(args, cfg) -> None:
 
         if destination == "tiktok":
             print(f"Uploading to TikTok: {data['title']}")
-            upload_info = tiktok_upload.upload_video(built["final"], data)
-            video_id = tiktok_upload.publish_video(upload_info["upload_id"], data, None)
-            tiktok_upload.record(video_id, slot_dir(slug))
+            publish_id = tiktok_upload.send_to_inbox(built["final"], data)
+            tiktok_upload.record(publish_id, slot_dir(slug))
             research.mark_used(slug)
 
             report["published"] = {
                 "title": data["title"],
-                "url": f"https://www.tiktok.com/@pawfect.love.animals/video/{video_id}",
+                "url": "draft in the TikTok app — attach products, then post",
                 "platform": "tiktok",
                 "runtime_min": round(built["runtime_s"] / 60, 1),
             }
@@ -580,6 +584,7 @@ def main() -> None:
     sub.add_parser("queue")
     sub.add_parser("reauth")
     sub.add_parser("tiktok")
+    sub.add_parser("tiktokauth")
     sub.add_parser("resume")
     sub.add_parser("status")
 
@@ -594,6 +599,7 @@ def main() -> None:
         "approve": cmd_approve, "publish": cmd_publish, "make": cmd_make,
         "auto": cmd_auto, "resume": cmd_resume, "status": cmd_status,
         "voicetest": cmd_voicetest, "queue": cmd_queue, "reauth": cmd_reauth, "tiktok": cmd_tiktok,
+        "tiktokauth": cmd_tiktokauth,
     }
 
     log = ROOT / "logs" / "last_run.log"
