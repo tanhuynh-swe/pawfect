@@ -395,7 +395,7 @@ def cmd_tiktok(args, cfg) -> None:
 
 def cmd_tiktokauth(args, cfg) -> None:
     """One-time TikTok login. Uploading is granted per account, not per app."""
-    tiktok_upload.authorize()
+    tiktok_upload.authorize(args.code)
 
 
 def cmd_reauth(args, cfg) -> None:
@@ -584,7 +584,7 @@ def main() -> None:
     sub.add_parser("queue")
     sub.add_parser("reauth")
     sub.add_parser("tiktok")
-    sub.add_parser("tiktokauth")
+    p = sub.add_parser("tiktokauth"); p.add_argument("--code", default=None)
     sub.add_parser("resume")
     sub.add_parser("status")
 

@@ -80,29 +80,31 @@ def _post_form(payload: dict[str, str]) -> dict[str, Any]:
     return body
 
 
-def authorize() -> None:
-    """One-time login, exchanging the code the redirect page shows for tokens."""
+def authorize(code: str | None = None) -> None:
+    """One-time login, exchanging the code the redirect page shows for tokens.
+
+    Two steps rather than one prompt: the code arrives in a browser, and not
+    every shell this runs from has an interactive stdin to paste it back into.
+    """
     key, secret = _credentials()
     redirect = _redirect_uri()
-    params = {
-        "client_key": key,
-        "scope": SCOPE,
-        "response_type": "code",
-        "redirect_uri": redirect,
-        "state": "pawfect",
-    }
-    print("\nOpen this in a browser and approve the app:\n")
-    print("  " + AUTHORIZE_URL + "?" + urllib.parse.urlencode(params))
-    print(
-        "\nTikTok then sends you to your redirect page, which shows the "
-        "authorization code.\nPaste it here (it is the `code` value, and it "
-        "expires within minutes)."
-    )
-    code = input("\ncode: ").strip()
     if not code:
-        raise SystemExit("No code given.")
+        params = {
+            "client_key": key,
+            "scope": SCOPE,
+            "response_type": "code",
+            "redirect_uri": redirect,
+            "state": "pawfect",
+        }
+        print("\n1. Open this and approve the app:\n")
+        print("  " + AUTHORIZE_URL + "?" + urllib.parse.urlencode(params))
+        print("\n2. TikTok sends you to your redirect page, which shows the")
+        print("   authorization code. Then run, within a few minutes:\n")
+        print("  python run.py tiktokauth --code <THE_CODE>")
+        return
+
     # TikTok percent-encodes the code in the redirect; paste-back often keeps it.
-    code = urllib.parse.unquote(code)
+    code = urllib.parse.unquote(code.strip())
 
     body = _post_form({
         "client_key": key,
