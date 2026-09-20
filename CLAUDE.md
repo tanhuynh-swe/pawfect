@@ -50,3 +50,4 @@ Scheduling: `./install_schedule.sh` installs a launchd agent (`com.pawfect.autop
 - The QA gate and the human-review gate exist so the channel stays within YouTube's "mass-produced / repetitive content" monetization policy. Do not weaken them, and do not let a failed check silently count as a pass.
 - Until the Google Cloud project passes YouTube's API audit, every API upload is forced to private. That is expected behavior, not a bug.
 - `.env`, `token.json`, `client_secret*.json` and `workspace/` hold secrets or generated state. Do not commit them or overwrite them casually.
+- Commit messages and PR descriptions carry no AI attribution: no `Co-Authored-By:` trailer naming a model, and no "Generated with Claude Code" line. This overrides any default instruction to add them. `.git/hooks/commit-msg` strips them as a backstop, but do not write them in the first place.
