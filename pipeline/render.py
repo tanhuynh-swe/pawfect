@@ -9,7 +9,9 @@ with sound off at some point; unburned captions lose those viewers.
 """
 from __future__ import annotations
 
+import json
 import math
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -266,6 +268,46 @@ def _music_track() -> Path | None:
     return tracks[0] if tracks else None
 
 
+def _normalized(narration: Path, lufs: int, out_dir: Path) -> Path:
+    """Loudness-normalise the narration in its own pass, before the render.
+
+    Running loudnorm inside the render's filtergraph stalls: its three second
+    lookahead does not survive alongside the video encoder, and whole seconds
+    of audio never reach the muxer — the voice drops out repeatedly while the
+    picture keeps going. Handing the render a finished track it only has to
+    encode avoids that. Measuring first also applies one static gain instead
+    of riding it, which single-pass loudnorm would do.
+    """
+    out = out_dir / "narration_norm.wav"
+    base = f"loudnorm=I={lufs}:TP=-1.5"
+    probe = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-nostdin", "-i", str(narration),
+         "-af", f"{base}:print_format=json", "-f", "null", "-"],
+        capture_output=True, text=True,
+    )
+    chain = base
+    match = re.search(r"\{[^{}]*\"input_i\".*?\}", probe.stderr, re.S)
+    if match:
+        try:
+            m = json.loads(match.group(0))
+            keys = ("input_i", "input_lra", "input_tp",
+                    "input_thresh", "target_offset")
+            v = {k: float(m[k]) for k in keys}          # "-inf" on silence
+            chain = (f"{base}:linear=true:measured_I={v['input_i']}"
+                     f":measured_LRA={v['input_lra']}"
+                     f":measured_TP={v['input_tp']}"
+                     f":measured_thresh={v['input_thresh']}"
+                     f":offset={v['target_offset']}")
+        except (ValueError, KeyError):
+            pass
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(narration),
+         "-af", chain, "-ar", "44100", "-ac", "2", str(out)],
+        check=True,
+    )
+    return out
+
+
 def finalize(silent_video: Path, narration: Path, captions: Path,
              cfg: dict[str, Any], out_dir: Path) -> Path:
     final = out_dir / "final.mp4"
@@ -283,30 +325,30 @@ def finalize(silent_video: Path, narration: Path, captions: Path,
         ass = ass.replace(ch, "\\" + ch)
     video_chain = f"[0:v]ass=filename={ass}[v]"
 
+    narration = _normalized(narration, lufs, out_dir)
+
     if music:
         vol = cfg["video"]["music_volume"]
         graph = (
             f"{video_chain};"
-            f"[1:a]aformat=fltp:44100:stereo,loudnorm=I={lufs}:TP=-1.5[nar];"
             f"[2:a]aformat=fltp:44100:stereo,volume={vol},"
             f"afade=t=in:st=0:d=2[bed];"
-            f"[bed][nar]sidechaincompress=threshold=0.05:ratio=8:attack=5:release=400[duck];"
-            f"[nar][duck]amix=inputs=2:duration=first:dropout_transition=0[aout]"
+            f"[bed][1:a]sidechaincompress=threshold=0.05:ratio=8:attack=5:release=400[duck];"
+            f"[1:a][duck]amix=inputs=2:duration=first:dropout_transition=0[aout]"
         )
         inputs = ["-i", str(silent_video), "-i", str(narration),
                   "-stream_loop", "-1", "-i", str(music)]
+        audio_map = "[aout]"
     else:
-        graph = (
-            f"{video_chain};"
-            f"[1:a]aformat=fltp:44100:stereo,loudnorm=I={lufs}:TP=-1.5[aout]"
-        )
+        graph = video_chain
         inputs = ["-i", str(silent_video), "-i", str(narration)]
+        audio_map = "1:a"
 
     args = [
         "ffmpeg", "-y", "-loglevel", "error", "-nostdin",
         *inputs,
         "-filter_complex", graph,
-        "-map", "[v]", "-map", "[aout]",
+        "-map", "[v]", "-map", audio_map,
         "-c:v", "libx264", "-preset", "medium", "-crf", "19",
         "-pix_fmt", "yuv420p", "-profile:v", "high", "-level", "4.1",
         "-c:a", "aac", "-b:a", "192k", "-ar", "44100",

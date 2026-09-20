@@ -103,6 +103,25 @@ def _pad_tail(path: Path, seconds: float) -> None:
     padded.replace(path)
 
 
+def _cap_pauses(path: Path, seconds: float) -> None:
+    """Shorten every pause inside a clip to at most `seconds`.
+
+    edge-tts rests about a quarter second at each comma. Vietnamese narration
+    is comma-heavy, so a scene picks up a pause every couple of seconds and the
+    voice reads as repeatedly stopping rather than as speaking in phrases. The
+    pause still has to exist, so it is shortened rather than removed.
+    """
+    capped = path.with_name(path.stem + "_cap.wav")
+    subprocess.run(
+        ["ffmpeg", "-y", "-loglevel", "error", "-i", str(path),
+         "-af", f"silenceremove=stop_periods=-1:stop_duration={seconds}"
+                f":stop_threshold=-50dB:detection=peak",
+         "-ar", "22050", "-ac", "1", str(capped)],
+        check=True,
+    )
+    capped.replace(path)
+
+
 def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
     """One sentence through Microsoft's free endpoint, verified on arrival.
 
@@ -126,6 +145,8 @@ def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
     floor = len(text) / _MAX_CHARS_PER_SECOND
     delays = [0, 3, 8, 20]
     last_error = ""
+    best = out.with_name(out.stem + "_best.wav")
+    best_seconds = 0.0
     for attempt, wait in enumerate(delays, start=1):
         if wait:
             time.sleep(wait)
@@ -142,9 +163,17 @@ def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
                     check=True,
                 )
                 _trim_silence(out)
-                if duration(out) >= floor:
+                # Checked before pauses are capped: capping removes silence,
+                # which would make a healthy clip look too fast to be real.
+                have = duration(out)
+                if have >= floor:
+                    _cap_pauses(out, cfg["voice"].get("phrase_pause", 0.12))
                     mp3.unlink(missing_ok=True)
+                    best.unlink(missing_ok=True)
                     return
+                if have > best_seconds:
+                    best_seconds = have
+                    shutil.copyfile(out, best)
                 last_error = "truncated audio returned"
         except subprocess.CalledProcessError as exc:
             detail = (exc.stderr or exc.stdout or "").strip()
@@ -152,6 +181,16 @@ def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
         if attempt < len(delays):
             print(f"      retrying ({last_error[:70]})")
     mp3.unlink(missing_ok=True)
+    if best_seconds > 0:
+        # The length test cannot tell a clipped sentence from a naturally
+        # brisk one, so it decides which attempt to prefer rather than whether
+        # the build may continue. Losing a whole video to it would be worse
+        # than narrating one sentence slightly short.
+        best.replace(out)
+        _cap_pauses(out, cfg["voice"].get("phrase_pause", 0.12))
+        print(f"      every attempt came back short; keeping the longest "
+              f"({best_seconds:.1f}s): {text[:40]}...")
+        return
     raise RuntimeError(f"edge-tts failed after {len(delays)} tries: {last_error}")
 
 
@@ -199,8 +238,8 @@ def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
             part = work / f"{i:02d}.wav"
             _edge_sentence(sentence, part, cfg)
             parts.append(part)
-        _join(parts, out, cfg["voice"].get("sentence_silence", 0.35))
-        _pad_tail(out, cfg["voice"].get("scene_gap", 0.25))
+        _join(parts, out, cfg["voice"].get("sentence_silence", 0.25))
+        _pad_tail(out, cfg["voice"].get("scene_gap", 0.18))
     finally:
         shutil.rmtree(work, ignore_errors=True)
 

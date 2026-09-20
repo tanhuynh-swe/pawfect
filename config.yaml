@@ -87,9 +87,13 @@ voice:
   # Pause between sentences within a scene. Clips are trimmed of the silence
   # edge-tts pads them with first, so this is the whole pause, not an addition
   # to it — raising it slows the narration's breathing noticeably.
-  sentence_silence: 0.35
+  sentence_silence: 0.25
   # Pause left at the end of a scene so the next one does not run into it.
-  scene_gap: 0.25
+  scene_gap: 0.18
+  # Longest pause allowed inside a sentence. edge-tts rests about 0.25s at
+  # every comma, and Vietnamese narration is comma-heavy, so uncapped the
+  # voice stops every couple of seconds.
+  phrase_pause: 0.12
 
 visuals:
   # Tried in order. pexels and pixabay need a free API key and give the best
