@@ -142,27 +142,62 @@ def concat_shots(shots: list[Path], out_dir: Path) -> Path:
 
 
 
-def _caption_chunks(scenes: list[dict[str, Any]], durations: list[float]):
-    """Yield (start, end, text) for every caption line, timed by word count."""
-    t = 0.0
-    for scene, dur in zip(scenes, durations):
-        words = scene["narration"].split()
-        if not words:
-            t += dur
-            continue
-        chunks, current = [], []
-        for word in words:
+CJK = re.compile(r"[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]")
+
+# Characters that may not start a line: a stray comma on a line of its own
+# is the classic giveaway that text was wrapped without reading CJK rules.
+NO_LINE_START = "、。，．！？：；）」』】〉》”’%\u3001\u3002"
+
+
+def _caption_pieces(text: str) -> list[str]:
+    """Split one scene's narration into caption-sized lines.
+
+    Latin text breaks on words. CJK has no spaces to break on, so it breaks on
+    length instead, preferring to land just after punctuation — splitting every
+    seven "words" would put a whole scene on screen at once.
+    """
+    if not CJK.search(text):
+        pieces, current = [], []
+        for word in text.split():
             current.append(word)
             if len(current) >= 7 or word.endswith((".", "!", "?")):
-                chunks.append(current)
+                pieces.append(" ".join(current))
                 current = []
         if current:
-            chunks.append(current)
-        total_words = sum(len(c) for c in chunks)
+            pieces.append(" ".join(current))
+        return pieces
+
+    pieces, current = [], ""
+    for ch in text:
+        current += ch
+        if (ch in "。！？"
+                or (ch in "，、；：" and len(current) >= 8)
+                or len(current) >= 16):
+            pieces.append(current.strip())
+            current = ""
+    if current.strip():
+        pieces.append(current.strip())
+    return pieces
+
+
+def _weight(piece: str) -> int:
+    """How long a piece should stay up, relative to its scene."""
+    return len(piece) if CJK.search(piece) else len(piece.split())
+
+
+def _caption_chunks(scenes: list[dict[str, Any]], durations: list[float]):
+    """Yield (start, end, text) for every caption line, timed by its length."""
+    t = 0.0
+    for scene, dur in zip(scenes, durations):
+        pieces = _caption_pieces(scene["narration"])
+        if not pieces:
+            t += dur
+            continue
+        total = sum(_weight(p) for p in pieces) or 1
         cursor = t
-        for chunk in chunks:
-            span = dur * (len(chunk) / total_words)
-            yield cursor, cursor + span, " ".join(chunk).replace("\n", " ")
+        for piece in pieces:
+            span = dur * (_weight(piece) / total)
+            yield cursor, cursor + span, piece.replace("\n", " ")
             cursor += span
         t += dur
 
@@ -206,8 +241,20 @@ CAPTION_FONTS_VI = [
 ]
 
 
-def _caption_font(size: int, vietnamese: bool) -> ImageFont.FreeTypeFont:
-    for path in (CAPTION_FONTS_VI if vietnamese else CAPTION_FONTS):
+# Latin fonts have no CJK glyphs at all, so Chinese needs its own list.
+CAPTION_FONTS_ZH = [
+    "/System/Library/Fonts/Hiragino Sans GB.ttc",
+    "/System/Library/Fonts/STHeiti Medium.ttc",
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/Library/Fonts/Arial Unicode.ttf",
+]
+
+
+def _caption_font(size: int, language: str) -> ImageFont.FreeTypeFont:
+    fonts = {"vi": CAPTION_FONTS_VI, "zh": CAPTION_FONTS_ZH}.get(
+        language, CAPTION_FONTS
+    )
+    for path in fonts:
         if Path(path).exists():
             return ImageFont.truetype(path, size)
     return ImageFont.load_default(size)
@@ -215,6 +262,23 @@ def _caption_font(size: int, vietnamese: bool) -> ImageFont.FreeTypeFont:
 
 def _wrap(draw: ImageDraw.ImageDraw, text: str,
           font: ImageFont.FreeTypeFont, width: int) -> list[str]:
+    if CJK.search(text):
+        # No spaces to break on: wrap per character instead. Closing
+        # punctuation may not begin a line, so it is allowed to overhang the
+        # margin rather than be pushed down on its own.
+        wrapped: list[str] = []
+        run = ""
+        for ch in text:
+            over = run and draw.textlength(run + ch, font=font) > width
+            if over and ch not in NO_LINE_START:
+                wrapped.append(run)
+                run = ch
+            else:
+                run += ch
+        if run:
+            wrapped.append(run)
+        return wrapped
+
     lines: list[str] = []
     line: list[str] = []
     for word in text.split():
@@ -260,9 +324,9 @@ def build_caption_overlay(scenes: list[dict[str, Any]], durations: list[float],
     w, h = v["width"], v["height"]
     side = v.get("side_margin", 160)
     margin_v = v.get("caption_margin_v", 90)
-    vietnamese = cfg.get("_language") == "vi"
-    cap_font = _caption_font(v.get("caption_size", 58), vietnamese)
-    ban_font = _caption_font(v.get("banner_size", 92), vietnamese)
+    language = cfg.get("_language") or "en"
+    cap_font = _caption_font(v.get("caption_size", 58), language)
+    ban_font = _caption_font(v.get("banner_size", 92), language)
 
     captions = list(_caption_chunks(scenes, durations))
     banners: list[tuple[float, float, str]] = []

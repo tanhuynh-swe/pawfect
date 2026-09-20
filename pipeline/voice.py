@@ -55,15 +55,24 @@ def _piper(text: str, out: Path, cfg: dict[str, Any]) -> None:
     )
 
 
-# No speech is intelligible above this rate, so a clip shorter than
+# No speech is intelligible above these rates, so a clip shorter than
 # len(text) / this is proof the endpoint dropped audio, not a fast read.
+# A CJK character carries a whole syllable, so it is spoken far slower than a
+# Latin one — measured around 5/s against 16-23/s. One figure for both would
+# be either useless for Chinese or wrong for everything else.
 _MAX_CHARS_PER_SECOND = 25.0
+_MAX_CJK_CHARS_PER_SECOND = 8.0
 
-_SENTENCE_BREAK = re.compile(r"(?<=[.!?…])\s+")
+_CJK = re.compile(r"[\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uff00-\uffef]")
+
+# Latin sentences end with punctuation and a space; CJK ends with its own
+# full-width punctuation and no space at all, so splitting on whitespace would
+# hand the whole scene over as one request.
+_SENTENCE_BREAK = re.compile(r"(?<=[.!?…])\s+|(?<=[。！？])")
 
 
 def _sentences(text: str) -> list[str]:
-    parts = [p.strip() for p in _SENTENCE_BREAK.split(text) if p.strip()]
+    parts = [p.strip() for p in _SENTENCE_BREAK.split(text) if p and p.strip()]
     return parts or [text.strip()]
 
 
@@ -142,7 +151,9 @@ def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
         f"--text={text}",
         f"--write-media={mp3}",
     ]
-    floor = len(text) / _MAX_CHARS_PER_SECOND
+    rate = (_MAX_CJK_CHARS_PER_SECOND if _CJK.search(text)
+            else _MAX_CHARS_PER_SECOND)
+    floor = len(text) / rate
     delays = [0, 3, 8, 20]
     last_error = ""
     best = out.with_name(out.stem + "_best.wav")

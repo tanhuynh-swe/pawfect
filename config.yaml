@@ -83,6 +83,7 @@ voice:
   voices:
     en: en-US-AvaMultilingualNeural
     vi: vi-VN-NamMinhNeural
+    zh: zh-CN-XiaoxiaoNeural
   # A touch slower than default reads as considered rather than rushed.
   edge_rate: "-2%"
   edge_pitch: "+0Hz"
