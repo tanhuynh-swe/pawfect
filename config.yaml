@@ -98,9 +98,19 @@ voice:
   sentence_silence: 0.25
   # Pause left at the end of a scene so the next one does not run into it.
   scene_gap: 0.18
-  # Longest pause allowed inside a sentence. edge-tts rests about 0.25s at
-  # every comma, and Vietnamese narration is comma-heavy, so uncapped the
-  # voice stops every couple of seconds.
+  # Longest pause allowed anywhere inside one synthesised clip. edge-tts
+  # rests about 0.25s at every comma, and Vietnamese narration is comma-heavy,
+  # so uncapped the voice stops every couple of seconds. A clip now holds
+  # several sentences, so this has to stay long enough that a full stop is
+  # still audible as one — below about 0.25 the sentences run together.
+  max_pause: 0.32
+  # Sentences are grouped into requests of at most this many characters.
+  # One sentence per request restarts the voice's intonation at every full
+  # stop, which is what made short beats ("Cham. Khong nhuc nhich.") read as a
+  # list. Raising it makes the voice flow further but lengthens each stream,
+  # and a long stream is the one the endpoint truncates.
+  batch_chars: 200
+  # Read only by configs written before max_pause existed.
   phrase_pause: 0.12
 
 visuals:

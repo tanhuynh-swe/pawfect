@@ -131,8 +131,42 @@ def _cap_pauses(path: Path, seconds: float) -> None:
     capped.replace(path)
 
 
-def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
-    """One sentence through Microsoft's free endpoint, verified on arrival.
+def _pause_cap(cfg: dict[str, Any]) -> float:
+    """Longest silence allowed inside one synthesised clip.
+
+    A clip now usually holds several sentences, so this has to leave a
+    sentence break audible as well as shorten a comma. `phrase_pause` is still
+    read for configs written before batching, where a clip was one sentence
+    and the only pauses in it were commas.
+    """
+    voice = cfg["voice"]
+    return float(voice.get("max_pause", voice.get("phrase_pause", 0.12)))
+
+
+def _batches(sentences: list[str], budget: int) -> list[str]:
+    """Group consecutive sentences into requests of at most `budget` chars.
+
+    One sentence per request resets the voice's prosody at every full stop,
+    which is heard as a list of statements rather than someone talking. It is
+    worst where a scene is written in short beats: "Cham. Khong nhuc nhich.
+    Cham manh hon." is three requests, three fresh intonation contours and two
+    manufactured gaps. Grouping them into one request lets the voice carry a
+    line through, and a sentence too short to stand alone stops being its own
+    fragile request. The budget keeps the stream short enough that the
+    endpoint rarely truncates it.
+    """
+    groups: list[str] = []
+    for sentence in sentences:
+        if groups and len(groups[-1]) + 1 + len(sentence) <= budget:
+            groups[-1] = f"{groups[-1]} {sentence}"
+        else:
+            groups.append(sentence)
+    return groups
+
+
+def _edge_chunk(text: str, out: Path, cfg: dict[str, Any]) -> None:
+    """One batch of sentences through Microsoft's free endpoint, verified on
+    arrival.
 
     The endpoint streams the clip back in chunks and will sometimes end the
     stream early, leaving a file that plays fine but is missing its tail. That
@@ -178,7 +212,7 @@ def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
                 # which would make a healthy clip look too fast to be real.
                 have = duration(out)
                 if have >= floor:
-                    _cap_pauses(out, cfg["voice"].get("phrase_pause", 0.12))
+                    _cap_pauses(out, _pause_cap(cfg))
                     mp3.unlink(missing_ok=True)
                     best.unlink(missing_ok=True)
                     return
@@ -198,7 +232,7 @@ def _edge_sentence(text: str, out: Path, cfg: dict[str, Any]) -> None:
         # the build may continue. Losing a whole video to it would be worse
         # than narrating one sentence slightly short.
         best.replace(out)
-        _cap_pauses(out, cfg["voice"].get("phrase_pause", 0.12))
+        _cap_pauses(out, _pause_cap(cfg))
         print(f"      every attempt came back short; keeping the longest "
               f"({best_seconds:.1f}s): {text[:40]}...")
         return
@@ -245,9 +279,10 @@ def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
     work.mkdir(parents=True, exist_ok=True)
     try:
         parts = []
-        for i, sentence in enumerate(_sentences(text)):
+        budget = int(cfg["voice"].get("batch_chars", 200))
+        for i, chunk in enumerate(_batches(_sentences(text), budget)):
             part = work / f"{i:02d}.wav"
-            _edge_sentence(sentence, part, cfg)
+            _edge_chunk(chunk, part, cfg)
             parts.append(part)
         _join(parts, out, cfg["voice"].get("sentence_silence", 0.25))
         _pad_tail(out, cfg["voice"].get("scene_gap", 0.18))
