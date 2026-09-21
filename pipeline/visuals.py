@@ -22,8 +22,10 @@ used so the render never dies halfway through a batch.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import subprocess
+import time
 from pathlib import Path
 from typing import Any
 
@@ -41,13 +43,26 @@ def _cache_dir(out_dir: Path) -> Path:
     return d
 
 
-def _download(url: str, dest: Path) -> bool:
+def _download(url: str, dest: Path, budget: float = 90.0) -> bool:
+    """Fetch a clip, giving up if it is merely trickling.
+
+    requests' timeout is per read, not per download, so a CDN that keeps
+    sending a few bytes at a time never trips it. One Pixabay clip took nine
+    minutes to deliver two megabytes and held up the whole build behind it.
+    The budget caps the whole transfer, and a clip that cannot beat it is
+    abandoned for the next candidate.
+    """
+    start = time.monotonic()
     try:
         with requests.get(url, stream=True, timeout=TIMEOUT, headers=UA) as r:
             r.raise_for_status()
             with dest.open("wb") as fh:
                 for chunk in r.iter_content(1 << 16):
                     fh.write(chunk)
+                    if time.monotonic() - start > budget:
+                        raise TimeoutError(
+                            f"still downloading after {budget:.0f}s"
+                        )
         return dest.stat().st_size > 10_000
     except Exception as exc:
         print(f"    download failed: {exc}")
@@ -80,7 +95,7 @@ def _mentions(tokens: list[str], word: str) -> bool:
 
 
 def _relevant(candidates: list[tuple[str, Any, str]], query: str, variant: int,
-              seen: set[str]) -> list[tuple[str, Any]]:
+              seen: set[str], cfg_blocked: tuple[str, ...] = ()) -> list[tuple[str, Any]]:
     """Choose the candidate whose own description matches the query.
 
     Every provider searches loosely. Pexels ORs the words together, so
@@ -103,13 +118,21 @@ def _relevant(candidates: list[tuple[str, Any, str]], query: str, variant: int,
     subject = next((s for s in SUBJECTS if s in words), None)
     others = [w for w in words if w != subject]
     need_extra = 1 if len(words) >= 3 else 0
+    wanted_species = [sp for sp in SPECIES if any(w in sp for w in words)]
 
+    blocked = set(cfg_blocked)
     ranked: list[tuple[int, Any]] = []
     for tag, item, label in candidates:
-        if tag in seen:
+        if tag in seen or tag in blocked:
             continue
         tokens = _tokens(label)
         if subject and not _mentions(tokens, subject):
+            continue
+        # The clip has to be of the animal asked for, not merely share a verb
+        # or a landscape with one.
+        if wanted_species and not any(
+            any(t in sp for t in tokens) for sp in wanted_species
+        ):
             continue
         extra = sum(1 for w in others if _mentions(tokens, w))
         if extra < need_extra:
@@ -192,10 +215,12 @@ def _pexels(query: str, cfg: dict[str, Any], variant: int = 0,
             (f"pexels:{v.get('id')}", v, v.get("url") or "")
             for v in r.json().get("videos", [])
         ]
-        for tag, video in _relevant(candidates, query, variant, seen):
+        for tag, video in _relevant(candidates, query, variant, seen,
+                                tuple(cfg['visuals'].get('blocked_sources', []))):
             chosen = _best_video_file(video.get("video_files", []), cfg)
             if chosen:
                 seen.add(tag)
+                cfg["_last_source"] = tag
                 return chosen["link"]
     except Exception as exc:
         print(f"    pexels: {exc}")
@@ -244,11 +269,13 @@ def _coverr(query: str, cfg: dict[str, Any], variant: int = 0,
                 continue
             label = f"{v.get('title') or ''} {v.get('description') or ''}"
             candidates.append((f"coverr:{v.get('id')}", v, label))
-        for tag, video in _relevant(candidates, query, variant, seen):
+        for tag, video in _relevant(candidates, query, variant, seen,
+                                tuple(cfg['visuals'].get('blocked_sources', []))):
             urls = video.get("urls") or {}
             link = urls.get("mp4_download") or urls.get("mp4")
             if link:
                 seen.add(tag)
+                cfg["_last_source"] = tag
                 return link
     except Exception as exc:
         print(f"    coverr: {exc}")
@@ -285,11 +312,13 @@ def _pexels_photos(query: str, cfg: dict[str, Any], variant: int = 0,
             (f"pexels_photo:{p.get('id')}", p, p.get("alt") or "")
             for p in r.json().get("photos", [])
         ]
-        for tag, photo in _relevant(candidates, query, variant, seen):
+        for tag, photo in _relevant(candidates, query, variant, seen,
+                                tuple(cfg['visuals'].get('blocked_sources', []))):
             src = photo.get("src", {})
             link = src.get("large2x") or src.get("original") or src.get("large")
             if link and (photo.get("width") or 0) >= 1280:
                 seen.add(tag)
+                cfg["_last_source"] = tag
                 return link
     except Exception as exc:
         print(f"    pexels photos: {exc}")
@@ -333,6 +362,14 @@ def _pixabay(query: str, cfg: dict[str, Any], variant: int = 0,
                 return (v.get("height") or 0) > (v.get("width") or 0)
             hits.sort(key=lambda h: not _tall(h))
 
+        blocked = [t.lower() for t in cfg["visuals"].get("exclude_terms", [])]
+        if blocked:
+            # Pixabay carries 3D character renders and cartoon animals beside
+            # the real footage. One closed the last build on a grinning
+            # cartoon bulldog, which reads as clipart next to real pets.
+            hits = [h for h in hits
+                    if not any(b in (h.get("tags") or "").lower() for b in blocked)]
+
         if cfg["visuals"].get("exclude_ai", True):
             # Pixabay carries AI-generated footage, tagged as such. Synthetic
             # animals land in the uncanny valley on a channel whose whole
@@ -344,7 +381,8 @@ def _pixabay(query: str, cfg: dict[str, Any], variant: int = 0,
         candidates = [
             (f"pixabay:{h.get('id')}", h, h.get("tags") or "") for h in hits
         ]
-        for tag, hit in _relevant(candidates, query, variant, seen):
+        for tag, hit in _relevant(candidates, query, variant, seen,
+                                tuple(cfg['visuals'].get('blocked_sources', []))):
             videos = hit.get("videos", {})
             candidates = [
                 v for v in videos.values()
@@ -358,6 +396,7 @@ def _pixabay(query: str, cfg: dict[str, Any], variant: int = 0,
             within = [v for v in candidates if edge(v) <= ceiling]
             chosen = max(within, key=edge) if within else min(candidates, key=edge)
             seen.add(tag)
+            cfg["_last_source"] = tag
             return chosen["url"]
     except Exception as exc:
         print(f"    pixabay: {exc}")
@@ -400,8 +439,10 @@ def _wikimedia(query: str, cfg: dict[str, Any], variant: int = 0,
             url = info.get("thumburl") or info.get("url")
             if url and mime in ("image/jpeg", "image/png") and width >= 1280:
                 candidates.append((url, url, page.get("title") or url))
-        for tag, url in _relevant(candidates, query, variant, seen):
+        for tag, url in _relevant(candidates, query, variant, seen,
+                                tuple(cfg['visuals'].get('blocked_sources', []))):
             seen.add(tag)
+            cfg["_last_source"] = tag
             return url
     except Exception as exc:
         print(f"    wikimedia: {exc}")
@@ -428,6 +469,29 @@ def _fallback_card(query: str, dest: Path, cfg: dict[str, Any], seconds: float) 
     return dest
 
 
+def _record_source(media: Path, index: int, provider: str, query: str,
+                   url: str, cfg: dict[str, Any]) -> None:
+    """Write down which clip filled which shot.
+
+    Without this a shot that looks wrong cannot be traced back to the clip
+    that produced it, so it cannot be blocked — the only way to find the id
+    was to re-run searches and guess. It doubles as the attribution trail
+    Coverr's licence asks for.
+    """
+    path = media / "sources.json"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    except Exception:
+        data = {}
+    data[f"{index:03d}"] = {
+        "provider": provider,
+        "source": cfg.get("_last_source"),
+        "query": query,
+        "url": url,
+    }
+    path.write_text(json.dumps(data, indent=2, sort_keys=True), encoding="utf-8")
+
+
 def _suffix_for(url: str) -> str:
     lowered = url.lower().split("?")[0]
     for suffix in (".mp4", ".jpg", ".jpeg", ".png"):
@@ -442,6 +506,25 @@ STOPWORDS = {
 }
 
 SUBJECTS = ("puppy", "kitten", "dog", "cat", "wolf", "vet", "owner")
+
+# Words that mean an animal is the subject, including the breeds people search
+# by. A query naming one of these must be answered by a clip whose own label
+# also names an animal — without this, "beagle running" is satisfied by a
+# couple jogging on a beach and "german shepherd running grass" by a flock of
+# geese, because only "running" and "grass" had to match.
+DOG_WORDS = {
+    "dog", "dogs", "puppy", "puppies", "pup", "doggy", "canine",
+    "labrador", "retriever", "beagle", "poodle", "husky", "corgi", "chihuahua",
+    "pug", "shiba", "terrier", "collie", "dachshund", "rottweiler", "boxer",
+    "bulldog", "spaniel", "shepherd", "dalmatian", "greyhound", "mastiff",
+    "pointer", "setter", "samoyed", "akita", "malamute", "pomeranian",
+}
+CAT_WORDS = {"cat", "cats", "kitten", "kittens", "feline", "kitty"}
+
+# Species, not "an animal". A gate that accepts any animal word lets a flock
+# of geese tagged "animals" answer "german shepherd running grass", which is
+# exactly what it did.
+SPECIES = (DOG_WORDS, CAT_WORDS)
 
 # Beats where a joke would land badly. A query about a seizure or a poisoning
 # must not be answered with a clip of a cat falling off a shelf.
@@ -522,8 +605,9 @@ def fetch_clip(query: str, index: int, seconds: float, cfg: dict[str, Any],
             if not url:
                 continue
             dest = media / f"{index:03d}{_suffix_for(url)}"
-            if _download(url, dest):
+            if _download(url, dest, float(cfg["visuals"].get("download_timeout", 90))):
                 print(f"    shot {index}: {name} — '{q}'")
+                _record_source(media, index, name, q, url, cfg)
                 return dest
 
     print(f"    shot {index}: no match for '{query}', using generated card")

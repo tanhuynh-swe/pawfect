@@ -55,7 +55,12 @@ shorts:
   height: 1920
   # Far shorter shots than long-form: vertical viewers leave in seconds, and
   # a static frame is the fastest way to lose them.
-  max_shot_seconds: 2.8
+  # Raised from 2.8. Faster cutting holds vertical viewers, but a 70-second
+  # short then needs thirty distinct clips, and the free libraries do not
+  # hold thirty genuinely relevant clips for one topic — the search runs out
+  # and starts returning dogs that merely share a tag. Fewer, longer, correct
+  # shots beat more shots that do not match the narration.
+  max_shot_seconds: 4.2
   caption_size: 74          # readable on a phone at arm's length
   banner_size: 88
   caption_margin_v: 380     # clear of the Shorts/TikTok UI along the bottom
@@ -162,6 +167,23 @@ visuals:
   # and keeps the pipeline working out of the box, but it is stills only and
   # its animal photographs are often wild rather than domestic, so it is last.
   providers: [coverr, pixabay, pexels, pexels_photos, wikimedia]
+  # Clips checked by eye and rejected. Tags cannot catch these: the canicross
+  # ones are honestly tagged "dogs, run, running" but the dog is out of frame
+  # for most of the shot, so they play as footage of human legs under
+  # narration about a dog sprinting.
+  blocked_sources:
+    - "pixabay:27539"
+    - "pixabay:216019"
+    - "pixabay:216020"
+    - "pixabay:317454"
+    # 2296: a person's legs walking, the dog barely in frame.
+    # 77623: a white dog so close and so soft it reads as an unidentifiable blur.
+    - "pixabay:2296"
+    - "pixabay:77623"
+
+  # Whole-transfer budget per clip. requests' own timeout only fires between
+  # reads, so without this a trickling CDN stalls the build indefinitely.
+  download_timeout: 90
   orientation: landscape
   # Preferred long edge. Below this the next-best file is taken anyway, but
   # nothing under 1280 is ever accepted: upscaled to 1080p it looks like a
@@ -176,6 +198,10 @@ visuals:
   # Skip Pixabay clips tagged "ai generated". Synthetic animals undercut a
   # channel about what real pets do.
   exclude_ai: true
+  # Same reasoning, for the rendered and drawn animals Pixabay files beside
+  # its real footage. A cartoon bulldog next to real pets reads as clipart.
+  exclude_terms: [cartoon, animation, animated, 3d, render, rendering,
+                  illustration, character, clipart, drawing]
   # Tried between the scene's own query and the bare noun, so a filler shot is
   # still an animal doing something ridiculous rather than a stock-photo pose.
   # Skipped automatically on medical and safety beats.
