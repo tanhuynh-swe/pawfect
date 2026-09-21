@@ -47,6 +47,11 @@ video:
   # Captions are drawn with Pillow and composited, so this no longer depends
   # on the ffmpeg build having libass.
   burn_captions: false
+  # Drawn animation only (visuals.providers: [toon]). Pillow does not
+  # anti-alias, so frames are drawn at this multiple of the output size and
+  # scaled back down. 3 is clean; 2 is about twice as fast with slightly
+  # softer lines; 1 disables it and the outlines come out stair-stepped.
+  toon_supersample: 3
 
 # Vertical format, used automatically by any script with "format": "vertical".
 # Anything not listed here falls back to the `video` block above.
@@ -166,7 +171,9 @@ visuals:
   # missing key would otherwise mean no footage at all. wikimedia needs no key
   # and keeps the pipeline working out of the box, but it is stills only and
   # its animal photographs are often wild rather than domestic, so it is last.
-  providers: [coverr, pixabay, pexels, pexels_photos, wikimedia]
+  # 'toon' draws each shot instead of searching for it (pipeline/toon.py).
+  # Swap back to the stock list to return to footage.
+  providers: [toon]
   # Clips checked by eye and rejected. Tags cannot catch these: the canicross
   # ones are honestly tagged "dogs, run, running" but the dog is out of frame
   # for most of the shot, so they play as footage of human legs under

@@ -596,6 +596,47 @@ def fetch_clip(query: str, index: int, seconds: float, cfg: dict[str, Any],
         if cached:
             return max(cached, key=lambda p: p.stat().st_mtime)
 
+    # Drawn animation short-circuits the search entirely: there is nothing to
+    # look for, because the scene is drawn to the query.
+    if "toon" in cfg["visuals"]["providers"]:
+        from . import toon
+        # Skia is the better renderer (real beziers, gradients, native
+        # anti-aliasing) but Pillow stays as a fallback so the pipeline still
+        # draws on a machine where skia-python will not install.
+        try:
+            from . import toon_skia as backend
+            engine = "skia"
+        except ImportError:
+            backend = toon
+            engine = "pillow"
+        species = toon.species_for(query)
+        if species == "cat" and engine == "pillow":
+            # Only the Skia character has a cat. Drawing one with the Pillow
+            # backend would put a dog under cat narration, which is the whole
+            # mismatch this renderer exists to remove, so say so rather than
+            # let it pass quietly.
+            print(f"    shot {index}: WARNING '{query}' is a cat, but the "
+                  f"Pillow backend only draws dogs — install skia-python")
+        # Consecutive shots of the same scene used to restart the animation
+        # clock and the camera, so a run of three sleeping shots cut like a
+        # glitch. Carrying the elapsed time and camera phase across the run
+        # makes them read as one continuous take that happens to be cut.
+        # Keyed on the species too: a cut from a sleeping dog to a sleeping
+        # cat is a different take, not a continuation of the same one.
+        name = f"{species}:{toon.scene_for(query)}"
+        prev_name, prev_time, prev_cam = cfg.get("_toon_run", (None, 0.0, 0.0))
+        if prev_name == name:
+            cfg["_toon_offset"], cfg["_toon_cam"] = prev_time, prev_cam
+        else:
+            cfg["_toon_offset"], cfg["_toon_cam"] = 0.0, 0.0
+        cfg["_toon_run"] = (name, cfg["_toon_offset"] + seconds,
+                            cfg["_toon_cam"] + 0.5)
+
+        dest = media / f"{index:03d}.mp4"
+        backend.render_clip(query, seconds, cfg, dest)
+        print(f"    shot {index}: drawn/{engine} — '{query}' -> {name}")
+        return dest
+
     for q in _query_ladder(query, cfg):
         for name in cfg["visuals"]["providers"]:
             provider = PROVIDERS.get(name)

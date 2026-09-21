@@ -128,6 +128,11 @@ def build_shots(scenes: list[dict[str, Any]], durations: list[float],
                 # beat rather than whatever sits at its midpoint.
                 pos = 0 if n == 1 else int((k + 0.5) / n * len(queries))
                 q = queries[min(len(queries) - 1, pos)]
+                # The drawn renderer puts the scene's caption in the frame and
+                # varies its camera move per shot, so both travel with the
+                # request. Stock providers ignore them.
+                cfg["_shot_text"] = scene.get("on_screen_text", "") if k == 0 else ""
+                cfg["_shot_index"] = counter
                 clip = fetch_clip(q, counter, per, cfg, out_dir)
                 _shot(clip, dest, per, cfg, counter)
             paths.append(dest)
