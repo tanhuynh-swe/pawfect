@@ -8,3 +8,6 @@ google-auth-httplib2>=0.2
 piper-tts>=1.2
 edge-tts>=7.0
 anthropic>=0.40
+# Vietnamese narration. Pulls onnxruntime and friends (~540MB of models
+# on first run); only needed if you publish Vietnamese videos.
+vieneu>=3.8

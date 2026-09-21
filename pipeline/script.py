@@ -65,7 +65,7 @@ Return JSON with exactly this shape:
   "scenes": [
     {{
       "narration": "2-4 sentences of spoken text",
-      "visual_query": "2-4 word stock footage search, concrete and filmable",
+      "visual_queries": ["{qmin}-{qmax} stock searches, one per beat, in spoken order"],
       "on_screen_text": "optional 2-5 word caption, or empty string"
     }}
   ]
@@ -73,7 +73,25 @@ Return JSON with exactly this shape:
 
 Write {scenes} scenes. The first scene is the hook: it must land in under 12
 seconds. The last scene asks one specific question for the comments — a real
-question about the viewer's own pet, not "let me know what you think"."""
+question about the viewer's own pet, not "let me know what you think".
+
+VISUALS — this is the half of the video people actually watch, so write the
+queries, do not label them:
+- The render cuts to a new shot every {shot_seconds} seconds and walks the
+  scene's queries in order, so give each scene {qmin}-{qmax} of them and make
+  query two show what sentence two is talking about. A scene whose queries are
+  four angles on its opening line is the failure to avoid.
+- Each query is 3-6 words naming a subject and something a camera can film:
+  "beagle stealing toast counter", never "loyalty", "trust" or "pet health".
+- Make them funny. This channel is about animals caught mid-absurdity, so reach
+  for the clip that would get a laugh — cat wedged in a box two sizes small,
+  dog mid-zoomies, puppy losing a fight with a blanket — whenever it still
+  shows what the narration is saying. Where the two pull apart, relevance wins:
+  a joke over the wrong subject is worse than a plain shot of the right one.
+- Drop the comedy on the safety beats. Symptoms, pain, poisoning, the vet, an
+  emergency: those get a plain, calm, literal query.
+- Keep it current — contemporary homes, daylight, the way phones film now.
+- Never repeat a query anywhere in the script."""
 
 
 def build_prompt(topic: dict[str, Any], cfg: dict[str, Any]) -> str:
@@ -81,6 +99,14 @@ def build_prompt(topic: dict[str, Any], cfg: dict[str, Any]) -> str:
     minutes = (lo + hi) / 2
     wpm = cfg["script"]["words_per_minute"]
     words = int(minutes * wpm)
+    scenes = max(14, words // 55)
+    # One query per shot: the render cuts every max_shot_seconds, so a scene's
+    # worth of narration needs about that many. Asked for as a range, because a
+    # scene that runs long should not end up recycling its first query.
+    shot_seconds = float(cfg["video"]["max_shot_seconds"])
+    per_scene_seconds = (words / max(1, scenes)) / wpm * 60
+    qmax = max(2, min(6, round(per_scene_seconds / shot_seconds) + 1))
+    qmin = max(2, qmax - 2)
     related = "\n".join(f"- {s}" for s in topic.get("related_searches", [])) or "- (none found)"
     facts = topic.get("facts", "") or "(no reference text available — rely on well-established consensus only)"
     return TEMPLATE.format(
@@ -93,7 +119,10 @@ def build_prompt(topic: dict[str, Any], cfg: dict[str, Any]) -> str:
         minutes=f"{lo}-{hi}",
         wpm=wpm,
         words=words,
-        scenes=max(14, words // 55),
+        scenes=scenes,
+        shot_seconds=shot_seconds,
+        qmin=qmin,
+        qmax=qmax,
     )
 
 
@@ -107,6 +136,27 @@ def _extract_json(text: str) -> dict[str, Any]:
     return json.loads(text[start : end + 1])
 
 
+def scene_queries(scene: dict[str, Any]) -> list[str]:
+    """The shot searches for one scene, in the order they are spoken.
+
+    Scripts written before the render cut per beat carry a single
+    `visual_query` string instead, and those still have to build, so the old
+    key is read as a one-item list when the new one is absent.
+    """
+    raw = scene.get("visual_queries")
+    if isinstance(raw, str):
+        raw = [raw]
+    queries: list[str] = []
+    for q in raw if isinstance(raw, list) else []:
+        if isinstance(q, str) and q.strip() and q.strip() not in queries:
+            queries.append(q.strip())
+    if not queries:
+        legacy = (scene.get("visual_query") or "").strip()
+        if legacy:
+            queries.append(legacy)
+    return queries
+
+
 def validate(script: dict[str, Any]) -> dict[str, Any]:
     required = ["title", "description", "tags", "scenes"]
     missing = [k for k in required if k not in script]
@@ -117,7 +167,12 @@ def validate(script: dict[str, Any]) -> dict[str, Any]:
     for i, scene in enumerate(script["scenes"]):
         if not scene.get("narration", "").strip():
             raise ValueError(f"Scene {i} has empty narration.")
-        scene.setdefault("visual_query", "")
+        queries = scene_queries(scene)
+        scene["visual_queries"] = queries
+        # Kept in step so anything still reading the old key — a hand-edited
+        # script, the troubleshooting table in the README — sees the scene's
+        # opening shot rather than an empty string.
+        scene["visual_query"] = queries[0] if queries else ""
         scene.setdefault("on_screen_text", "")
     script.setdefault("thumbnail_text", script["title"][:28])
     if len(script["title"]) > 100:

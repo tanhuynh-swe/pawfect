@@ -2,7 +2,9 @@
 
 One shot per `max_shot_seconds` of narration, so a 40-second scene gets six
 different visuals instead of one long static clip. That single detail does more
-for retention than anything else in this file.
+for retention than anything else in this file. Each of those shots searches its
+own query from the scene, in spoken order, so the picture follows the sentence
+being narrated rather than the scene's opening line.
 
 Captions are burned in as ASS. Roughly 70% of YouTube pet content is watched
 with sound off at some point; unburned captions lose those viewers.
@@ -111,12 +113,22 @@ def build_shots(scenes: list[dict[str, Any]], durations: list[float],
     for scene, dur in zip(scenes, durations):
         n = max(1, math.ceil(dur / max_shot))
         per = dur / n
+        queries = scene.get("visual_queries") or [scene.get("visual_query", "")]
         for k in range(n):
             dest = shots_dir / f"{counter:04d}.mp4"
             if cfg.get("_refresh") or not _shot_is_current(dest, per, cfg):
-                clip = fetch_clip(
-                    scene.get("visual_query", ""), counter, per, cfg, out_dir
-                )
+                # Spread the scene's queries across its shots in order, so the
+                # picture tracks the narration through the scene instead of
+                # holding on whatever its first line was about. Each shot takes
+                # the query covering the moment at its own midpoint: three
+                # queries over six shots is two shots each, not 1,2,3,1,2,3,
+                # and three queries over two shots takes the first and last
+                # beat rather than dropping the end of the scene.
+                # A scene short enough for one shot leads with its opening
+                # beat rather than whatever sits at its midpoint.
+                pos = 0 if n == 1 else int((k + 0.5) / n * len(queries))
+                q = queries[min(len(queries) - 1, pos)]
+                clip = fetch_clip(q, counter, per, cfg, out_dir)
                 _shot(clip, dest, per, cfg, counter)
             paths.append(dest)
             counter += 1

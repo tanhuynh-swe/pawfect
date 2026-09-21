@@ -12,6 +12,7 @@ rendering pipeline without any audio setup.
 """
 from __future__ import annotations
 
+import os
 import re
 import shutil
 import time
@@ -21,6 +22,82 @@ from pathlib import Path
 from typing import Any
 
 VOICES_DIR = Path(__file__).resolve().parent.parent / "assets" / "voices"
+
+
+def _language(cfg: dict[str, Any]) -> str:
+    """The language this build is narrating in."""
+    return (cfg.get("_language")
+            or cfg.get("channel", {}).get("target_language", "en"))
+
+
+# Vietnamese the voice reads wrongly as written — not merely oddly, wrongly.
+# Ordered longest unit first, so "kg" is not matched as "g".
+_VI_UNITS = [
+    (r"(?<=\d)\s*°\s*C\b", " độ C"),
+    (r"(?<=\d)\s*%", " phần trăm"),
+    (r"(?<=\d)\s*kg\b", " ki lô gam"),
+    (r"(?<=\d)\s*mg\b", " mi li gam"),
+    (r"(?<=\d)\s*ml\b", " mi li lít"),
+    (r"(?<=\d)\s*cm\b", " xăng ti mét"),
+    (r"(?<=\d)\s*mm\b", " mi li mét"),
+    (r"(?<=\d)\s*km\b", " ki lô mét"),
+    (r"(?<=\d)\s*g\b", " gam"),
+    (r"(?<=\d)\s*m\b", " mét"),
+    (r"(?<=\d)\s*l\b", " lít"),
+]
+
+
+def _prepare_vi(text: str) -> str:
+    """Rewrite Vietnamese narration into what it is meant to sound like.
+
+    The voice is reading text written for the eye. "2-3 lần" comes back as
+    "hai trừ ba lần", because a hyphen between numbers is a minus sign to it;
+    "lần/tuần" comes back with the slash read out. Each of these is a single
+    wrong word in the middle of an otherwise fine sentence, which is exactly
+    what makes a read sound machine-generated.
+    """
+    text = text.replace("…", ",").replace("–", "-").replace("—", "-")
+    # Between two numbers a hyphen is a range, not a minus sign.
+    text = re.sub(r"(\d)\s*-\s*(\d)", r"\1 đến \2", text)
+    # "2 lần/tuần" is spoken "hai lần mỗi tuần".
+    text = re.sub(r"(?<=\w)\s*/\s*(?=\w)", " mỗi ", text)
+    # Vietnamese writes thousands with a dot and decimals with a comma, which
+    # is the opposite of what the digits look like to an English reader.
+    text = re.sub(r"(?<=\d)\.(?=\d{3}(?!\d))", "", text)
+    text = re.sub(r"(?<=\d),(?=\d)", " phẩy ", text)
+    for pattern, replacement in _VI_UNITS:
+        text = re.sub(pattern, replacement, text, flags=re.IGNORECASE)
+    return re.sub(r"\s{2,}", " ", text).strip()
+
+
+PREPARE = {"vi": _prepare_vi}
+
+
+def prepare(text: str, cfg: dict[str, Any]) -> str:
+    """Language-specific cleanup applied to narration before it is spoken."""
+    fn = PREPARE.get(_language(cfg))
+    return fn(text) if fn else text
+
+
+def piper_voice_name(cfg: dict[str, Any]) -> str:
+    """The Piper model for this build's language.
+
+    Piper models are single-language. Handed Vietnamese, the English model
+    does not fail — it reads the letters with English phonetics and returns
+    confident gibberish, which would then be narrated over a finished video
+    and uploaded. So a language with no model configured refuses instead.
+    """
+    lang = _language(cfg)
+    configured = cfg["voice"].get("piper_voices") or {}
+    if lang in configured:
+        return configured[lang]
+    default_lang = cfg.get("channel", {}).get("target_language", "en")
+    if lang == default_lang:
+        return cfg["voice"]["piper_voice"]
+    raise RuntimeError(
+        f"no piper voice configured for language '{lang}' — add one under "
+        f"voice.piper_voices in config.yaml, or keep the edge engine for it"
+    )
 
 
 def ensure_piper_voice(name: str) -> Path:
@@ -40,7 +117,8 @@ def ensure_piper_voice(name: str) -> Path:
 
 
 def _piper(text: str, out: Path, cfg: dict[str, Any]) -> None:
-    model = ensure_piper_voice(cfg["voice"]["piper_voice"])
+    model = ensure_piper_voice(piper_voice_name(cfg))
+    text = prepare(text, cfg)
     subprocess.run(
         [
             "piper",
@@ -274,6 +352,7 @@ def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
     pause between sentences a real duration rather than whatever the endpoint
     happened to leave behind.
     """
+    text = prepare(text, cfg)
     work = out.parent / f"_{out.stem}_parts"
     shutil.rmtree(work, ignore_errors=True)
     work.mkdir(parents=True, exist_ok=True)
@@ -290,6 +369,116 @@ def _edge(text: str, out: Path, cfg: dict[str, Any]) -> None:
         shutil.rmtree(work, ignore_errors=True)
 
 
+_VIENEU_MODELS: dict[str, Any] = {}
+
+_HF_EXTERNAL_DATA_ERROR = "External data path escapes model directory"
+
+
+def _flatten_hf_snapshot() -> int:
+    """Turn the Hugging Face cache's symlinks into hard links.
+
+    The cache keeps one content-addressed blob pool and symlinks each snapshot
+    file into it, so two files that sit side by side in a model directory
+    resolve to unrelated directories. ONNX Runtime reads this model's weights
+    from a `.data` file named relative to the `.onnx` file, checks that the
+    result has not escaped the model's directory, and refuses to load.
+
+    Hard links are the fix rather than copies: same directory, same inode, no
+    second copy of half a gigabyte of weights.
+    """
+    cache = Path.home() / ".cache" / "huggingface" / "hub"
+    relinked = 0
+    for model in cache.glob("models--*"):
+        for link in (model / "snapshots").rglob("*"):
+            if not link.is_symlink():
+                continue
+            target = link.resolve()
+            if not target.is_file():
+                continue
+            link.unlink()
+            try:
+                os.link(target, link)
+            except OSError:
+                shutil.copyfile(target, link)
+            relinked += 1
+    return relinked
+
+
+def _vieneu_model(cfg: dict[str, Any]):
+    """Load VieNeu-TTS once per process and keep it.
+
+    The model takes about thirteen seconds to come up, which is fine once per
+    build and unacceptable once per scene.
+    """
+    settings = cfg["voice"].get("vieneu") or {}
+    mode = settings.get("mode", "v3turbo")
+    if mode in _VIENEU_MODELS:
+        return _VIENEU_MODELS[mode]
+
+    # Set before the import: vieneu pulls in huggingface_hub, which reads this
+    # when it decides whether to symlink a download into the snapshot
+    # directory. Real files there are what keeps ONNX Runtime happy.
+    os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS", "1")
+    try:
+        from vieneu import Vieneu
+    except ImportError as exc:
+        raise RuntimeError(
+            "the 'vieneu' engine needs VieNeu-TTS: .venv/bin/pip install vieneu"
+        ) from exc
+
+    print(f"  loading VieNeu-TTS ({mode}), first run downloads ~540MB...")
+    try:
+        model = Vieneu(mode=mode)
+    except Exception as exc:
+        if _HF_EXTERNAL_DATA_ERROR not in str(exc):
+            raise
+        # A cache populated before HF_HUB_DISABLE_SYMLINKS was set.
+        print("  repairing the Hugging Face cache layout for ONNX Runtime...")
+        count = _flatten_hf_snapshot()
+        print(f"  relinked {count} cached files")
+        model = Vieneu(mode=mode)
+
+    _VIENEU_MODELS[mode] = model
+    return model
+
+
+def _vieneu(text: str, out: Path, cfg: dict[str, Any]) -> None:
+    """VieNeu-TTS — Vietnamese-native, offline, Apache 2.0.
+
+    Edge's vi-VN catalogue is two voices of its older generation, and no
+    amount of rate and pause tuning makes either of them sound like a person
+    rather than an announcement. This model is trained for Vietnamese, has
+    twenty-five voices across the northern, central and southern accents, and
+    will clone one from a few seconds of reference audio. It runs on the CPU
+    at roughly 0.4 times real time, so a Short narrates in well under a minute.
+    """
+    settings = cfg["voice"].get("vieneu") or {}
+    model = _vieneu_model(cfg)
+    spoken = prepare(text, cfg)
+
+    ref = settings.get("ref_audio")
+    if ref:
+        ref_path = Path(ref)
+        if not ref_path.is_absolute():
+            ref_path = Path(__file__).resolve().parent.parent / ref_path
+        if not ref_path.exists():
+            raise RuntimeError(f"voice.vieneu.ref_audio not found: {ref_path}")
+        ref = str(ref_path)
+
+    audio = model.infer(
+        spoken,
+        voice=None if ref else settings.get("voice", "Minh Quân Pro"),
+        ref_audio=ref,
+        denoise=bool(settings.get("denoise", True)),
+        temperature=float(settings.get("temperature", 0.8)),
+    )
+    model.save(audio, str(out))
+    # The model returns 48kHz; everything downstream is joined with `-c copy`,
+    # which needs one format throughout. _trim_silence resamples as it trims.
+    _trim_silence(out)
+    _pad_tail(out, cfg["voice"].get("scene_gap", 0.18))
+
+
 def _estimate(text: str, out: Path, cfg: dict[str, Any]) -> None:
     words = max(1, len(text.split()))
     seconds = round(words / (cfg["script"]["words_per_minute"] / 60), 2) + 0.4
@@ -300,12 +489,20 @@ def _estimate(text: str, out: Path, cfg: dict[str, Any]) -> None:
     )
 
 
-ENGINES = {"piper": _piper, "edge": _edge, "estimate": _estimate}
+ENGINES = {"piper": _piper, "edge": _edge, "vieneu": _vieneu,
+           "estimate": _estimate}
 
 # If the configured engine fails, these are tried in order before giving up.
 # Piper needs a one-time 60MB model download; edge needs none but needs
-# internet on every run. Between them, one almost always works.
+# internet on every run. Between them, one almost always works. vieneu is not
+# in this list: it speaks Vietnamese, and reaching for it to rescue an English
+# build would be worse than the failure.
 FALLBACKS = ["edge", "piper"]
+
+PROBE_TEXT = {
+    "vi": "Xin chào, đây là bài kiểm tra giọng đọc.",
+    "zh-TW": "你好，這是語音測試。",
+}
 
 
 def pick_engine(cfg: dict[str, Any], out_dir: Path) -> str:
@@ -319,6 +516,9 @@ def pick_engine(cfg: dict[str, Any], out_dir: Path) -> str:
         return configured
 
     order = [configured] + [e for e in FALLBACKS if e != configured]
+    # Probe in the language the build actually narrates: an engine can be
+    # perfectly healthy on English and have no model for Vietnamese.
+    phrase = PROBE_TEXT.get(_language(cfg), "Testing one two three.")
     probe = out_dir / "_voice_probe.wav"
     errors = []
 
@@ -328,7 +528,7 @@ def pick_engine(cfg: dict[str, Any], out_dir: Path) -> str:
             continue
         try:
             probe.unlink(missing_ok=True)
-            engine("Testing one two three.", probe, cfg)
+            engine(phrase, probe, cfg)
             if probe.exists() and probe.stat().st_size > 1000:
                 probe.unlink(missing_ok=True)
                 if name != configured:

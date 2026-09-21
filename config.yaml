@@ -76,6 +76,13 @@ voice:
   engine: edge
   piper_voice: en_US-lessac-medium
   piper_speed: 0.8          # 0.8 = slower, more natural; 1.0 = normal
+  # Piper models are single-language, and handed the wrong language one does
+  # not fail — it reads the letters with its own phonetics and returns
+  # confident gibberish. A language listed here may use the offline fallback;
+  # a language not listed fails loudly instead of narrating nonsense.
+  piper_voices:
+    en: en_US-lessac-medium
+    # vi: vi_VN-vais1000-medium   # uncomment to allow offline Vietnamese
   # The Multilingual voices are Microsoft's newer generation and sound far
   # more human than the older ones like AriaNeural — better sentence rhythm,
   # less of the flat "announcer" cadence. Run `python run.py voicetest` to
@@ -113,6 +120,37 @@ voice:
   # Read only by configs written before max_pause existed.
   phrase_pause: 0.12
 
+  # Per-language prosody, merged over everything above once the script's
+  # language is known. Vietnamese needs its own settings: vi-VN has only two
+  # Edge voices and both are the older generation, which read fast and even.
+  # Slowing the rate and letting the pauses breathe is most of the difference
+  # between "announcer" and "person". Tune these by ear with:
+  #   python run.py voicetest --language vi
+  # VieNeu-TTS: a Vietnamese-native model (Apache 2.0) that runs offline on
+  # the CPU at roughly 0.4x real time. Edge has exactly two vi-VN voices and
+  # both are its older, flatter generation; this has twenty-five across the
+  # northern, central and southern accents, and clones one from a few seconds
+  # of reference audio. Audition them with: python run.py voicetest --language vi
+  vieneu:
+    mode: v3turbo           # v3nano is faster and rougher, for a weak CPU
+    voice: "Minh Quân Pro"  # any preset name; see the voicetest listing
+    # Set this to a 3-8 second wav of a real voice to clone it instead, and
+    # the channel gets one narrator of its own rather than a stock preset.
+    # ref_audio: assets/voices/vi_reference.wav
+    denoise: true
+    temperature: 0.8        # lower is steadier, higher is more expressive
+
+  tuning:
+    vi:
+      # Vietnamese narrates with VieNeu rather than Edge. Everything below is
+      # only read if this build falls back to Edge.
+      engine: vieneu
+      edge_rate: "-8%"
+      edge_pitch: "+0Hz"
+      max_pause: 0.42         # commas allowed to land rather than be clipped
+      sentence_silence: 0.34  # a full stop should be heard as one
+      batch_chars: 260        # carry the line further before resetting prosody
+
 visuals:
   # Tried in order. pexels and pixabay need a free API key and give the best
   # footage; wikimedia needs nothing at all and keeps the pipeline working out
@@ -120,9 +158,25 @@ visuals:
   # automatically, with no config change.
   providers: [pexels, pixabay, wikimedia]
   orientation: landscape
+  # Preferred long edge. Below this the next-best file is taken anyway, but
+  # nothing under 1280 is ever accepted: upscaled to 1080p it looks like a
+  # screen recording.
   min_width: 1920
-  # Per-scene fallback if no stock clip matches the query.
-  fallback_query: "dog cat pet"
+  # Above this a clip is only used when there is no smaller version. 4K stock
+  # is a slow download and the render immediately scales it back down.
+  max_width: 2560
+  # Pixabay's default ordering is weighted by lifetime downloads, which keeps
+  # surfacing footage uploaded a decade ago. Newest-first looks current.
+  prefer_recent: true
+  # Tried between the scene's own query and the bare noun, so a filler shot is
+  # still an animal doing something ridiculous rather than a stock-photo pose.
+  # Skipped automatically on medical and safety beats.
+  tone_terms: [funny, playful]
+  # Per-shot fallback if no stock clip matches the query.
+  fallback_query: "funny pet"
+  # The same, for a query about symptoms, pain or the vet. A last-resort shot
+  # on one of those beats has to be plain.
+  sober_fallback_query: "pet dog cat"
 
 script:
   # api    = call Claude via ANTHROPIC_API_KEY (paid, but pennies per video)

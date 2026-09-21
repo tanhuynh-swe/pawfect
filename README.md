@@ -130,7 +130,7 @@ Everything is free. Total: **$0/month**.
 | Search demand | Google's public suggest endpoint | free, no key |
 | Facts | Wikipedia API | free, no key |
 | Script | Claude app (paste the prompt) | free with your plan |
-| Voice | Piper TTS, offline on your Mac | free, MIT licensed |
+| Voice | Edge TTS (English), VieNeu-TTS (Vietnamese), Piper offline | free, MIT / Apache 2.0 |
 | Footage | Pexels + Pixabay APIs | free key, commercial use, no attribution |
 | Editing | ffmpeg | free |
 | Thumbnail | Pillow | free |
@@ -341,9 +341,10 @@ topics/seed_topics.yaml
         ▼                        └── YOUR EDITORIAL PASS
     scenes[]
         │
-        ├──► voice.py ──── Piper TTS → one wav per scene, measured
+        ├──► voice.py ──── Edge / VieNeu / Piper TTS → one wav per scene, measured
         │
-        ├──► visuals.py ── Pexels / Pixabay → clips, rotated so no two repeat
+        ├──► visuals.py ── Pexels / Pixabay → one clip per shot, searched on
+        │                  that shot's own query, never reused in a video
         │
         └──► render.py ─── one shot per 6.5s, burned captions, ducked music,
                            loudness-normalized to −16 LUFS → final.mp4
@@ -393,9 +394,13 @@ published.
 |---|---|---|
 | Uploads stay private forever | API project not audited | Flip to public in Studio; apply for the audit |
 | `thumbnail rejected (403)` | Channel phone not verified | Verify in YouTube Studio |
-| "no stock match", colored cards | Pexels/Pixabay key missing or query too abstract | Check `.env`; make `visual_query` concrete and filmable |
+| "no stock match", colored cards | Pexels/Pixabay key missing or query too abstract | Check `.env`; make each `visual_queries` entry concrete and filmable |
+| Shots don't match what is being said | Scene has one query for a long scene | Give the scene one entry in `visual_queries` per ~6.5s of its narration, in spoken order |
 | Video is 3 min, not 7 | Script too short | More scenes in the prompt, or a richer topic |
 | Voice model won't download | Blocked network | It downloads once from Hugging Face; needs plain internet |
+| Vietnamese narration sounds robotic | Fell back to an Edge vi-VN voice | Check the build log says `voice engine: vieneu`; if it fell back, fix the reason it did rather than retuning Edge |
+| `External data path escapes model directory` | Hugging Face cached the ONNX weights as symlinks into its shared blob pool | The build repairs this itself and says so; it is safe to let it |
+| Vietnamese scene fails with "no piper voice configured" | Edge and VieNeu both failed, and Piper has no Vietnamese model | Deliberate: an English Piper model reading Vietnamese returns confident gibberish. Fix the network, or add `voice.piper_voices.vi` |
 | `quota exceeded` | Unlikely — uploads have their own ~100/day bucket | Wait for the daily reset |
 
 ---

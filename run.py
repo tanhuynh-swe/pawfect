@@ -9,7 +9,7 @@
   python run.py make                  topic -> script -> build, in one go
   python run.py auto                  fully unattended: everything + publish (YouTube/TikTok)
   python run.py resume                clear the hold counter after a pause
-  python run.py voicetest             render the same lines in 8 voices
+  python run.py voicetest [--language vi]   render the same lines in every candidate voice
   python run.py queue                 scripts waiting to be made into videos
   python run.py reauth                sign in to YouTube again (new permissions)
   python run.py tiktok                build queued TikTok shorts (for manual upload)
@@ -25,6 +25,7 @@ import json
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import traceback
@@ -76,7 +77,19 @@ def apply_format(cfg, data) -> bool:
             print(f"  language: {lang} — voice {voices[lang]}")
         else:
             print(f"  ! no voice configured for language '{lang}', using default")
-        cfg["_language"] = lang
+    # Recorded for every build, not only the translated ones: voice.py reads it
+    # to decide which text preparation the narration needs, and "en" has to be
+    # as explicit as "vi" for that to mean anything.
+    cfg["_language"] = lang
+
+    # Rate, pitch and pause lengths that suit English do not suit a language
+    # with a different rhythm, and vi-VN has no voice as good as the English
+    # multilingual ones to make up the difference.
+    tuning = (cfg["voice"].get("tuning") or {}).get(lang)
+    if tuning:
+        cfg["voice"] = {**cfg["voice"], **tuning}
+        print(f"  voice tuning for {lang}: "
+              + ", ".join(f"{k}={v}" for k, v in sorted(tuning.items())))
 
     if data.get("format") != "vertical":
         return False
@@ -228,6 +241,41 @@ def cmd_make(args, cfg) -> None:
     cmd_build(args, cfg)
 
 
+# vi-VN has exactly two Edge voices and both are the older, flatter
+# generation. The multilingual voices are Microsoft's newer one and speak
+# Vietnamese too — more expressive, with some accent on the tones — so they are
+# worth hearing side by side before settling. Each is also rendered at a
+# second, slower rate, because rate does as much for how human a Vietnamese
+# read sounds as the voice does.
+LANGUAGE_CANDIDATES = {
+    "vi": [
+        "vi-VN-HoaiMyNeural",             # female, the usual choice
+        "vi-VN-NamMinhNeural",            # male, currently configured
+        "en-US-AvaMultilingualNeural",    # newer generation, accented Vietnamese
+        "en-US-AndrewMultilingualNeural",
+        "en-US-EmmaMultilingualNeural",
+    ],
+    "zh-TW": [
+        "zh-TW-HsiaoChenNeural",
+        "zh-TW-HsiaoYuNeural",
+        "zh-TW-YunJheNeural",
+    ],
+}
+
+# Extra rates tried alongside the configured one, for languages whose voices
+# read too briskly by default.
+LANGUAGE_RATES = {"vi": ["-8%", "-14%"], "zh-TW": ["-6%"]}
+
+SAMPLE_TEXT = {
+    "vi": (
+        "Mèo của bạn đi tới mép bàn, nhìn thẳng vào mắt bạn, rồi đẩy cái ly "
+        "xuống sàn. Nó không thử trọng lực, và cũng không trả thù bạn vì "
+        "chuyến đi khám thú y hôm trước. Nếu chuyện này xảy ra 2-3 lần mỗi "
+        "ngày, đặc biệt là lúc ba giờ sáng, câu trả lời thành thật thường là "
+        "nó đang buồn chán chứ không phải nghịch ngợm."
+    ),
+}
+
 CANDIDATE_VOICES = [
     # Microsoft's newer multilingual generation — the most human-sounding.
     "en-US-AndrewMultilingualNeural",   # male, warm, conversational
@@ -243,15 +291,55 @@ CANDIDATE_VOICES = [
 ]
 
 
+def _voicetest_vieneu(sample: str, spoken: str, out: Path, cfg: dict,
+                      lang: str) -> None:
+    """Render the sample through VieNeu's preset voices.
+
+    Twenty-five presets is more than anyone wants to sit through, so this does
+    the ten the model's authors mark as their picks, which spans all three
+    regional accents and every reading style.
+    """
+    print(f"Sample ({len(sample.split())} words):\n  {sample[:120]}...\n")
+    model = voice._vieneu_model(cfg)
+    settings = cfg["voice"].get("vieneu") or {}
+
+    presets = [(label, name) for label, name in model.list_preset_voices()
+               if label.startswith("⭐")]
+    working = []
+    for label, name in presets:
+        dest = out / f"{name}.wav"
+        try:
+            audio = model.infer(
+                spoken, voice=name,
+                denoise=bool(settings.get("denoise", True)),
+                temperature=float(settings.get("temperature", 0.8)),
+            )
+            model.save(audio, str(dest))
+            print(f"  ok    {label}")
+            working.append(name)
+        except Exception as exc:
+            print(f"  skip  {name} — {str(exc).splitlines()[0][:90]}")
+
+    print(f"\n{len(working)} samples in: {out}")
+    print(f"Listen to them, then put the one you like in config.yaml under "
+          f"voice.vieneu.voice.\nTo use a real person's voice instead, point "
+          f"voice.vieneu.ref_audio at a clean 3-8 second wav of them."
+          f"\nRebuild that slot with --refresh-audio.")
+
+
 def cmd_voicetest(args, cfg) -> None:
     """Render the same paragraph in every candidate voice, so you can choose."""
-    out = slot_dir("voicetest")
+    args.language = args.language or cfg["channel"]["target_language"]
+    out = slot_dir("voicetest" if args.language == cfg["channel"]["target_language"]
+                   else f"voicetest-{args.language}")
     sample = args.text
     if not sample:
         slug_dir = slot_dir(args.slug) if args.slug else None
         if slug_dir and (slug_dir / "script.json").exists():
             data = json.loads((slug_dir / "script.json").read_text(encoding="utf-8"))
             sample = " ".join(s["narration"] for s in data["scenes"][:2])
+        elif args.language in SAMPLE_TEXT:
+            sample = SAMPLE_TEXT[args.language]
         else:
             sample = (
                 "You let your dog out into the garden, and within about four "
@@ -261,27 +349,60 @@ def cmd_voicetest(args, cfg) -> None:
                 "out backwards."
             )
 
+    lang = args.language
+    # The narration is normalised before it is spoken, so the sample has to be
+    # normalised too — otherwise you choose a voice on text the build will
+    # never hand it.
+    spoken = voice.prepare(sample, {**cfg, "_language": lang})
+    if spoken != sample:
+        print(f"Spoken as:\n  {spoken[:160]}...\n")
+
+    tuned_engine = ((cfg["voice"].get("tuning") or {}).get(lang, {})
+                    .get("engine", cfg["voice"]["engine"]))
+    if tuned_engine == "vieneu":
+        _voicetest_vieneu(sample, spoken, out, cfg, lang)
+        return
+
+    voices = LANGUAGE_CANDIDATES.get(lang, CANDIDATE_VOICES)
+    tuned = (cfg["voice"].get("tuning") or {}).get(lang, {})
+    base_rate = str(tuned.get("edge_rate", cfg["voice"].get("edge_rate", "+0%")))
+    pitch = str(tuned.get("edge_pitch", cfg["voice"].get("edge_pitch", "+0Hz")))
+    rates = [base_rate] + [r for r in LANGUAGE_RATES.get(lang, []) if r != base_rate]
+
     print(f"Sample ({len(sample.split())} words):\n  {sample[:120]}...\n")
     working = []
-    for name in CANDIDATE_VOICES:
-        dest = out / f"{name}.mp3"
-        try:
-            subprocess.run(
-                [sys.executable, "-m", "edge_tts", "--voice", name,
-                 "--rate", str(cfg["voice"].get("edge_rate", "+0%")),
-                 "--pitch", str(cfg["voice"].get("edge_pitch", "+0Hz")),
-                 "--text", sample, "--write-media", str(dest)],
-                check=True, capture_output=True, text=True,
-            )
-            print(f"  ok    {name}")
-            working.append(name)
-        except subprocess.CalledProcessError as exc:
-            last = (exc.stderr or "").strip().splitlines()[-1:] or ["failed"]
-            print(f"  skip  {name} — {last[0][:90]}")
+    for name in voices:
+        for rate in rates:
+            dest = out / f"{name}@{rate.replace('%', 'pct')}.mp3"
+            # The endpoint drops a request now and then. A sample missing from
+            # the comparison is worse here than in a build: you would choose
+            # between the voices that happened to answer.
+            for attempt in range(3):
+                try:
+                    subprocess.run(
+                        [sys.executable, "-m", "edge_tts", "--voice", name,
+                         "--rate", rate, "--pitch", pitch,
+                         "--text", spoken, "--write-media", str(dest)],
+                        check=True, capture_output=True, text=True,
+                    )
+                    print(f"  ok    {name}  {rate}")
+                    working.append(dest.name)
+                    break
+                except subprocess.CalledProcessError as exc:
+                    last = (exc.stderr or "").strip().splitlines()[-1:] or ["failed"]
+                    if attempt == 2:
+                        print(f"  skip  {name} {rate} — {last[0][:90]}")
+                    else:
+                        time.sleep(3)
 
     print(f"\n{len(working)} samples in: {out}")
-    print("Listen to them, then put the one you like in config.yaml under "
-          "voice.edge_voice, and rebuild with --refresh-audio.")
+    if lang == cfg["channel"]["target_language"]:
+        print("Listen to them, then put the one you like in config.yaml under "
+              "voice.edge_voice, and rebuild with --refresh-audio.")
+    else:
+        print(f"Listen to them, then put the voice you like in config.yaml under "
+              f"voice.voices.{lang}, and its rate under voice.tuning.{lang}."
+              f"\nRebuild that slot with --refresh-audio.")
 
 
 def _destination(d: Path) -> str:
@@ -581,6 +702,8 @@ def main() -> None:
     p = sub.add_parser("voicetest")
     p.add_argument("--slug", default="why-does-my-dog-eat-grass")
     p.add_argument("--text", default="")
+    p.add_argument("--language", default=None,
+                   help="language to audition voices for, e.g. vi")
     sub.add_parser("queue")
     sub.add_parser("reauth")
     sub.add_parser("tiktok")
