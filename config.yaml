@@ -46,7 +46,7 @@ video:
   narration_lufs: -16       # YouTube's normalization target
   # Captions are drawn with Pillow and composited, so this no longer depends
   # on the ffmpeg build having libass.
-  burn_captions: true
+  burn_captions: false
 
 # Vertical format, used automatically by any script with "format": "vertical".
 # Anything not listed here falls back to the `video` block above.
