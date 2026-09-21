@@ -1,100 +1,224 @@
 # Seed topics for Pawfect Love Animals.
 # `research.py` scores these against real YouTube search demand and picks the
-# best unused one. Add your own freely — one line each. Keep them specific:
-# "Why dogs eat grass" beats "dog facts".
+# best unused one. Add your own freely — one line each.
 #
-# wiki: optional Wikipedia article title used to ground the facts.
+# Two things to keep to when you add a topic:
+#
+#   Open on the behaviour, not the subject. "Why do dogs roll in fox poo"
+#   is a video. "Dog hygiene" is a category. The channel's whole format is a
+#   thing the owner finds funny or baffling, then the real reason.
+#
+#   Put the distinctive words in the first five. demand_score() searches only
+#   the first five words of the title, and those results are handed to the
+#   script as "what people search for". "Why do cats attack the robot vacuum"
+#   is scored as "why do cats attack", which comes back with results about
+#   cats attacking feet — and the script then gets written around those.
+#
+# wiki: optional Wikipedia article title used to ground the facts. Check that
+# it exists: a missing article silently produces a script with no grounding.
 
-- title: "Why does my dog eat grass?"
-  wiki: "Dog behavior"
-  angle: "Three real explanations, and the one warning sign that means call the vet."
+# --- dog comedy: the behaviour is the joke, the mechanism is the payload ---
 
-- title: "How much should I actually feed my cat each day?"
-  wiki: "Cat food"
-  angle: "Portion math by body weight, and why the bag's instructions overfeed."
+- title: "Why do dogs hate mailmen"
+  wiki: "Reinforcement"
+  angle: "The postman always leaves. Barking gets rewarded every single time, which is textbook reinforcement."
 
-- title: "Why do cats knead you with their paws?"
-  wiki: "Cat behavior"
-  angle: "The kitten reflex behind it and what it says about trust."
+- title: "Why do dogs fart so much"
+  wiki: "Flatulence"
+  angle: "Gulped air, the diet, and flat faces. Plus the one kind of smell that means a vet rather than a joke."
 
-- title: "Signs your dog is in pain but hiding it"
-  wiki: "Dog health"
-  angle: "The quiet behavioural changes owners miss for weeks."
+- title: "Why do dogs steal socks and pants"
+  wiki: "Olfaction"
+  angle: "Your scent is the entire point. And the swallowed sock that turns it into surgery."
 
-- title: "How often should you really bathe a dog?"
-  wiki: "Dog grooming"
-  angle: "Why over-bathing causes the smell people are trying to remove."
+- title: "Why do dogs love car windows"
+  wiki: "Olfaction"
+  angle: "A scent feed at sixty kilometres an hour, and what the eyes and ears pay for it."
 
-- title: "Is my cat drinking too much water?"
-  wiki: "Polydipsia"
-  angle: "The measurable threshold that separates normal from a vet visit."
+- title: "Why do dogs circle before pooping"
+  wiki: "Magnetoreception"
+  angle: "The north-south alignment finding everyone quotes, and how thin the evidence for it really is."
 
-- title: "Human foods that are dangerous for dogs"
-  wiki: "Chocolate poisoning"
-  angle: "Ranked by how much it takes to actually hurt a dog of each size."
-
-- title: "Why does my dog follow me everywhere?"
-  wiki: "Dog behavior"
-  angle: "Normal bonding versus separation anxiety, and how to tell them apart."
-
-- title: "How to introduce a new cat to your existing cat"
-  wiki: "Cat behavior"
-  angle: "The two-week scent protocol that prevents lifelong hostility."
-
-- title: "What your dog's sleeping position means"
+- title: "Why do dogs sleep upside down"
   wiki: "Dog anatomy"
-  angle: "What is genuinely known, and which viral claims have no evidence."
+  angle: "Dumping heat and total trust. When a dog stops doing it, something usually hurts."
 
-- title: "Why is my cat throwing up so often?"
-  wiki: "Hairball"
-  angle: "Frequency thresholds: what is normal, what needs a vet this week."
+- title: "Why do dogs shake off when dry"
+  wiki: "Dog communication"
+  angle: "A reset button after stress, not water. Once you see it you cannot unsee it."
 
-- title: "How long can you leave a dog alone at home?"
-  wiki: "Dog training"
-  angle: "By age and breed, with the bladder math nobody explains."
+- title: "Why do dogs snore so loudly"
+  wiki: "Snoring"
+  angle: "Funny on a pug, and the exact point at which it stops being funny."
 
-- title: "Do cats actually recognise their own name?"
-  wiki: "Cat intelligence"
-  angle: "What the 2019 Saito study found, and what it did not."
+- title: "Why do dogs kick grass after pooping"
+  wiki: "Olfaction"
+  angle: "Scent glands in the paws. It is signing the work, not tidying up."
 
-- title: "Why do dogs tilt their heads?"
-  wiki: "Dog cognition"
-  angle: "Hearing, vision, and the surprising link to word learning."
+- title: "Why do dogs beg at the table"
+  wiki: "Reinforcement"
+  angle: "You trained this. Once, by accident, and probably years ago."
 
-- title: "The right way to trim a dog's nails without hurting them"
-  wiki: "Dog grooming"
-  angle: "Finding the quick on dark nails, and what to do if you cut it."
-
-# --- behaviour-led: the funny thing first, the real reason second ---
-
-- title: "Why does my cat knock things off the table?"
-  wiki: "Cat behavior"
-  angle: "It looks like spite. It is hunting practice and an attention experiment."
-
-- title: "Why do dogs spin in circles before lying down?"
+- title: "Why do dogs fight vacuum cleaners"
   wiki: "Dog behavior"
-  angle: "An instinct with a real purpose, and when the spinning means a vet visit."
+  angle: "Noise plus unpredictable movement plus no way to make it stop."
 
-- title: "Why does my cat sit in boxes that are far too small?"
-  wiki: "Cat behavior"
-  angle: "Enclosed spaces measurably lower feline stress. The box is self-medication."
+- title: "Why do dogs roll over for belly rubs"
+  wiki: "Dog communication"
+  angle: "Not always an invitation. Telling the happy roll from the appeasing one."
 
-- title: "Why does my dog stare at me while it poops?"
+- title: "Why do dogs bring toys to visitors"
+  wiki: "Dog communication"
+  angle: "Rarely 'play with me'. What the toy in the mouth is actually doing."
+
+- title: "Why do dogs hate baths but love puddles"
   wiki: "Dog behavior"
-  angle: "Not awkwardness. It is the most vulnerable it gets, and it is watching for you."
+  angle: "Control and temperature. The puddle is their idea; the bath never is."
 
-- title: "Why do cats bring you dead animals?"
+- title: "Why dogs howl at music"
+  wiki: "Dog communication"
+  angle: "Pitch, not pain. Why a sustained note pulls a howl out of some breeds and not others."
+
+- title: "Why do dogs sigh so dramatically"
+  wiki: "Dog communication"
+  angle: "Contentment or giving up, and the body position that tells you which."
+
+# --- modern life: behaviours that only happen in a house like yours ---
+
+- title: "Why do cats attack robot vacuums"
   wiki: "Cat behavior"
-  angle: "The unsettling gift is a teaching instinct, and how to respond without punishing it."
+  angle: "A predator response to something that moves wrong. The 'it is just playing' read is usually backwards."
 
-- title: "Why does my dog eat like it has never been fed?"
-  wiki: "Dog behavior"
-  angle: "Usually normal, occasionally a symptom. The difference is measurable."
-
-- title: "Why does my cat scream at 3am?"
+- title: "Why do cats sit on laptops"
   wiki: "Cat behavior"
-  angle: "The crepuscular clock behind it, and the one version of this that is a vet visit."
+  angle: "Warmth, your scent, and a trick reinforced every single time it worked. Not jealousy."
 
-- title: "Why does my dog lick everything?"
+- title: "Why do cats chew charging cables"
+  wiki: "Cat behavior"
+  angle: "Texture, boredom and pica. The one that is genuinely an emergency, and how to cable-proof a room."
+
+- title: "Why do dogs bark at doorbells on TV"
   wiki: "Dog behavior"
-  angle: "Comfort, taste, or compulsion. How to tell which one you are looking at."
+  angle: "Conditioned to a sound, not a visitor. Why a video doorbell made the problem worse."
+
+- title: "Dog separation anxiety after returning to the office"
+  wiki: "Separation anxiety in dogs"
+  angle: "Where ordinary adjustment ends and a clinical problem starts, and the schedule that fixes it."
+
+- title: "Do cats watch television"
+  wiki: "Cat senses"
+  angle: "Flicker rate and motion detection, and why modern screens changed the honest answer."
+
+- title: "Why do cats prefer boxes to expensive toys"
+  wiki: "Cat play and toys"
+  angle: "What makes a toy work for a cat, and why most bestsellers fail that test."
+
+- title: "Why do dogs get the zoomies"
+  wiki: "Dog behavior"
+  angle: "A real name, a real pattern, and the times it is stress rather than joy."
+
+# --- the funny thing first, the real reason second ---
+
+- title: "Why do dogs roll in fox poo"
+  wiki: "Olfaction"
+  angle: "Three competing explanations, and not one of them is 'to annoy you'."
+
+- title: "Why do dogs sniff each other's bums"
+  wiki: "Olfaction"
+  angle: "An actual information exchange, and what each dog comes away knowing."
+
+- title: "Why do dogs eat cat poop"
+  wiki: "Coprophagia"
+  angle: "Common, usually harmless, occasionally not. What stops it and what never has."
+
+- title: "Why do dogs scoot their bum on the floor"
+  wiki: "Anal gland"
+  angle: "Funny until it is not. What the glands do, and the point this becomes a vet job."
+
+- title: "Why do cats headbutt you"
+  wiki: "Cat communication"
+  angle: "Bunting and scent glands, and what your face is being marked as."
+
+- title: "Why do cats lick you then bite"
+  wiki: "Cat behavior"
+  angle: "Overstimulation has a warning sign, and it always arrives before the teeth do."
+
+- title: "Why do cats chatter at birds"
+  wiki: "Cat behavior"
+  angle: "Frustration, a rehearsal of the kill bite, or both. What the evidence supports."
+
+- title: "Why do cats hate closed doors"
+  wiki: "Cat behavior"
+  angle: "Territory and control, and why shutting them out makes the scratching worse."
+
+- title: "Why do cats drink from running taps"
+  wiki: "Cat senses"
+  angle: "Moving water and bowl placement. 'Whisker fatigue' is everywhere and barely evidenced."
+
+- title: "Why do cats zoom around after pooping"
+  wiki: "Cat behavior"
+  angle: "Post-litter zoomies. The vagus nerve explanation is repeated everywhere and never really tested."
+
+- title: "Why do dogs yawn when not tired"
+  wiki: "Dog communication"
+  angle: "A calming signal, not boredom. Reading it changes how you handle a nervous dog."
+
+- title: "Why do dogs put a paw on you"
+  wiki: "Dog communication"
+  angle: "A learned request, not a bid for dominance. That framing has been dead for twenty years."
+
+- title: "Why do dogs hate hugs"
+  wiki: "Dog communication"
+  angle: "The stress signals visible in almost every family hug photo, and what to do instead."
+
+- title: "Why do dogs lean on your legs"
+  wiki: "Dog communication"
+  angle: "Contact seeking, balance, or anxiety. The three look identical and are not."
+
+- title: "Why do dogs howl at sirens"
+  wiki: "Dog communication"
+  angle: "Not pain, not prophecy. What a howl is for, and why some breeds cannot resist one."
+
+- title: "Why do dogs freeze and refuse to walk"
+  wiki: "Dog behavior"
+  angle: "Statue mode: fear, overwhelm, or a joint that hurts. How to tell which one you have."
+
+- title: "Why do dogs shake their toys violently"
+  wiki: "Dog behavior"
+  angle: "A real kill motion, safely expressed. When to let it run, and when to stop the game."
+
+- title: "Why do dogs chase their own tails"
+  wiki: "Dog behavior"
+  angle: "Play for a puppy, a warning sign in an adult. The line between them is measurable."
+
+- title: "Why do dogs bury food in the sofa"
+  wiki: "Dog behavior"
+  angle: "Caching behaviour indoors, and why scolding it makes a dog hide things better."
+
+- title: "Why do dogs twitch and paddle in their sleep"
+  wiki: "Dog behavior"
+  angle: "Dreaming, sleep stages, and the twitching that is a seizure instead."
+
+- title: "Why do cats sleep on your head"
+  wiki: "Cat behavior"
+  angle: "Warmth, safety and scent, and why your pillow specifically wins."
+
+- title: "Why do cats groom themselves after you pet them"
+  wiki: "Cat behavior"
+  angle: "Not an insult. Scent management, and what it says when it happens every time."
+
+- title: "Why do cats purr when they are unhappy"
+  wiki: "Purr"
+  angle: "Purring is not a mood. Where the self-soothing purr shows up, and why vets listen for it."
+
+- title: "Why do cats hate their carrier"
+  wiki: "Cat behavior"
+  angle: "The carrier only ever means the vet. Breaking that association takes two weeks, not one morning."
+
+- title: "Do dogs really see in black and white"
+  wiki: "Dichromacy"
+  angle: "No. What a dog's colour vision really is, and why it changes which toys they lose in grass."
+
+- title: "How smart is my dog really"
+  wiki: "Dog intelligence"
+  angle: "What the word-learning studies actually measured, and the breed rankings that mislead."
