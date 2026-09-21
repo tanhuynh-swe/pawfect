@@ -22,6 +22,7 @@ used so the render never dies halfway through a batch.
 from __future__ import annotations
 
 import hashlib
+import re
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,70 @@ def _rotate(items: list, variant: int) -> list:
         return items
     k = variant % len(items)
     return items[k:] + items[:k]
+
+
+def _tokens(text: str) -> list[str]:
+    """Descriptive words in a provider's own label for a clip."""
+    return [t for t in re.split(r"[^a-z]+", text.lower()) if len(t) > 2]
+
+
+def _mentions(tokens: list[str], word: str) -> bool:
+    """Loose word match, so 'flicking' finds 'flick' and 'cats' finds 'cat'."""
+    for token in tokens:
+        if token == word:
+            return True
+        short, long = sorted((token, word), key=len)
+        if len(short) >= 4 and long.startswith(short):
+            return True
+    return False
+
+
+def _relevant(candidates: list[tuple[str, Any, str]], query: str, variant: int,
+              seen: set[str]) -> list[tuple[str, Any]]:
+    """Choose the candidate whose own description matches the query.
+
+    Every provider searches loosely. Pexels ORs the words together, so
+    "cat riding robot vacuum" comes back led by a person walking beside a
+    robot vacuum and a man leaving a desk — no cat anywhere in it. The search
+    reports a hit, the ladder never falls back, and the narration then plays
+    over footage of the wrong thing entirely.
+
+    Each provider labels its own clips: Pexels in the URL slug, Pixabay in
+    tags, Wikimedia in the file title. Matching the query against that label
+    is what separates a clip of the thing from a clip that shares a word with
+    it. The subject is required outright — a scene about a cat may not be
+    filled with a vacuum cleaner — and a query specific enough to name three
+    things has to match one of the other two as well, or the ladder drops to a
+    simpler search rather than settling for something unrelated.
+    """
+    words = [w for w in query.lower().split() if w not in STOPWORDS]
+    if not words:
+        return []
+    subject = next((s for s in SUBJECTS if s in words), None)
+    others = [w for w in words if w != subject]
+    need_extra = 1 if len(words) >= 3 else 0
+
+    ranked: list[tuple[int, Any]] = []
+    for tag, item, label in candidates:
+        if tag in seen:
+            continue
+        tokens = _tokens(label)
+        if subject and not _mentions(tokens, subject):
+            continue
+        extra = sum(1 for w in others if _mentions(tokens, w))
+        if extra < need_extra:
+            continue
+        ranked.append((extra, (tag, item)))
+    if not ranked:
+        return []
+
+    # Best match first; rotate between equally good ones so two shots of the
+    # same scene do not both land on whatever the provider listed first.
+    out: list[tuple[str, Any]] = []
+    for score in sorted({r[0] for r in ranked}, reverse=True):
+        tier = [r[1] for r in ranked if r[0] == score]
+        out.extend(_rotate(tier, variant))
+    return out
 
 
 def _used(cfg: dict[str, Any]) -> set[str]:
@@ -123,10 +188,11 @@ def _pexels(query: str, cfg: dict[str, Any], variant: int = 0,
             timeout=TIMEOUT,
         )
         r.raise_for_status()
-        for video in _rotate(r.json().get("videos", []), variant):
-            tag = f"pexels:{video.get('id')}"
-            if tag in seen:
-                continue
+        candidates = [
+            (f"pexels:{v.get('id')}", v, v.get("url") or "")
+            for v in r.json().get("videos", [])
+        ]
+        for tag, video in _relevant(candidates, query, variant, seen):
             chosen = _best_video_file(video.get("video_files", []), cfg)
             if chosen:
                 seen.add(tag)
@@ -136,17 +202,114 @@ def _pexels(query: str, cfg: dict[str, Any], variant: int = 0,
     return None
 
 
+def _coverr(query: str, cfg: dict[str, Any], variant: int = 0,
+            seconds: float = 6.0) -> str | None:
+    """Coverr — curated free footage, smaller and better shot than the big libraries.
+
+    Every clip carries a written title and description rather than a filename,
+    which is the best relevance signal of any provider here.
+
+    Two caveats that are not this code's to solve: a key is issued by emailing
+    team@coverr.co rather than self-serve, and Coverr's terms ask for
+    attribution with their logo, which neither Pexels nor Pixabay require.
+    """
+    key = env("COVERR_API_KEY")
+    if not key:
+        return None
+    seen = _used(cfg)
+    portrait = cfg["visuals"]["orientation"] == "portrait"
+    try:
+        r = requests.get(
+            "https://api.coverr.co/videos",
+            params={"query": query, "page_size": 24, "urls": "true"},
+            headers={"Authorization": f"Bearer {key}", **UA},
+            timeout=TIMEOUT,
+        )
+        r.raise_for_status()
+        payload = r.json()
+        # The envelope is not pinned down in the public docs, so accept the
+        # shapes it is documented to return rather than guessing just one.
+        hits = payload if isinstance(payload, list) else (
+            payload.get("hits") or payload.get("videos") or payload.get("data") or []
+        )
+        candidates = []
+        for v in hits:
+            w = v.get("max_width") or 0
+            h = v.get("max_height") or 0
+            if max(w, h) < 1280:
+                continue
+            if portrait and w > h:
+                continue
+            if not portrait and h > w:
+                continue
+            label = f"{v.get('title') or ''} {v.get('description') or ''}"
+            candidates.append((f"coverr:{v.get('id')}", v, label))
+        for tag, video in _relevant(candidates, query, variant, seen):
+            urls = video.get("urls") or {}
+            link = urls.get("mp4_download") or urls.get("mp4")
+            if link:
+                seen.add(tag)
+                return link
+    except Exception as exc:
+        print(f"    coverr: {exc}")
+    return None
+
+
+def _pexels_photos(query: str, cfg: dict[str, Any], variant: int = 0,
+                   seconds: float = 6.0) -> str | None:
+    """Pexels stills, on the same key as the video search.
+
+    Some shots simply are not filmed. There is no stock video of a cat being
+    examined at a vet, but there are good photographs of exactly that, and
+    render.py gives a still a slow push and drift so it plays as footage.
+
+    Photographs also carry a written description rather than a URL slug, so
+    the relevance check has a real sentence to match against: "Veterinarian
+    using stethoscope to examine cat in a clinic setting" either mentions a
+    cat or it does not.
+    """
+    key = env("PEXELS_API_KEY")
+    if not key:
+        return None
+    seen = _used(cfg)
+    try:
+        r = requests.get(
+            "https://api.pexels.com/v1/search",
+            params={"query": query, "per_page": 24,
+                    "orientation": cfg["visuals"]["orientation"]},
+            headers={"Authorization": key, **UA},
+            timeout=TIMEOUT,
+        )
+        r.raise_for_status()
+        candidates = [
+            (f"pexels_photo:{p.get('id')}", p, p.get("alt") or "")
+            for p in r.json().get("photos", [])
+        ]
+        for tag, photo in _relevant(candidates, query, variant, seen):
+            src = photo.get("src", {})
+            link = src.get("large2x") or src.get("original") or src.get("large")
+            if link and (photo.get("width") or 0) >= 1280:
+                seen.add(tag)
+                return link
+    except Exception as exc:
+        print(f"    pexels photos: {exc}")
+    return None
+
+
 def _pixabay(query: str, cfg: dict[str, Any], variant: int = 0,
              seconds: float = 6.0) -> str | None:
     key = env("PIXABAY_API_KEY")
     if not key:
         return None
     seen = _used(cfg)
-    params = {"key": key, "q": query, "per_page": 24, "safesearch": "true"}
-    if cfg["visuals"].get("prefer_recent", True):
-        # Pixabay's popular ordering is weighted by lifetime downloads, which
-        # keeps surfacing footage uploaded a decade ago. Recent uploads look
-        # like the phones and homes the audience owns now.
+    params = {"key": key, "q": query, "per_page": 24, "safesearch": "true",
+              "min_width": int(cfg["visuals"].get("min_width", 1920))}
+    if cfg["visuals"].get("prefer_recent", False):
+        # Off by default, and it should stay off. Pixabay's "latest" ordering
+        # barely weighs the query: asked for a cat in a cardboard box it
+        # returns kebab cooking, grazing horses and a glacier, because those
+        # were uploaded most recently. "popular" is the only ordering that
+        # actually ranks on the search term.
         params["order"] = "latest"
     try:
         r = requests.get(
@@ -158,10 +321,30 @@ def _pixabay(query: str, cfg: dict[str, Any], variant: int = 0,
         # A clip shorter than the shot has to loop, so prefer the ones that
         # don't, without refusing the short ones outright.
         hits.sort(key=lambda h: (h.get("duration") or 0) < seconds)
-        for hit in hits:
-            tag = f"pixabay:{hit.get('id')}"
-            if tag in seen:
-                continue
+
+        # Pixabay's video search has no orientation parameter and its library
+        # is overwhelmingly landscape. Cropping a 1920x1080 clip to 1080x1920
+        # throws away two thirds of the frame, usually including the animal,
+        # so portrait clips are used first when the build is vertical — but
+        # landscape is still allowed rather than starving the search.
+        if cfg["visuals"]["orientation"] == "portrait":
+            def _tall(h: dict[str, Any]) -> bool:
+                v = (h.get("videos") or {}).get("large") or {}
+                return (v.get("height") or 0) > (v.get("width") or 0)
+            hits.sort(key=lambda h: not _tall(h))
+
+        if cfg["visuals"].get("exclude_ai", True):
+            # Pixabay carries AI-generated footage, tagged as such. Synthetic
+            # animals land in the uncanny valley on a channel whose whole
+            # promise is what real pets actually do, and using them would drag
+            # in a synthetic-media disclosure this channel does not otherwise
+            # need.
+            hits = [h for h in hits if "ai generated" not in (h.get("tags") or "").lower()]
+
+        candidates = [
+            (f"pixabay:{h.get('id')}", h, h.get("tags") or "") for h in hits
+        ]
+        for tag, hit in _relevant(candidates, query, variant, seen):
             videos = hit.get("videos", {})
             candidates = [
                 v for v in videos.values()
@@ -209,23 +392,24 @@ def _wikimedia(query: str, cfg: dict[str, Any], variant: int = 0,
         )
         r.raise_for_status()
         pages = list(r.json().get("query", {}).get("pages", {}).values())
-        usable = []
+        candidates = []
         for page in pages:
             info = (page.get("imageinfo") or [{}])[0]
             mime = info.get("mime", "")
             width = info.get("width") or 0
-            if mime in ("image/jpeg", "image/png") and width >= 1280:
-                usable.append(info.get("thumburl") or info.get("url"))
-        for url in _rotate([u for u in usable if u], variant):
-            if url not in seen:
-                seen.add(url)
-                return url
+            url = info.get("thumburl") or info.get("url")
+            if url and mime in ("image/jpeg", "image/png") and width >= 1280:
+                candidates.append((url, url, page.get("title") or url))
+        for tag, url in _relevant(candidates, query, variant, seen):
+            seen.add(tag)
+            return url
     except Exception as exc:
         print(f"    wikimedia: {exc}")
     return None
 
 
-PROVIDERS = {"pexels": _pexels, "pixabay": _pixabay, "wikimedia": _wikimedia}
+PROVIDERS = {"coverr": _coverr, "pexels": _pexels, "pixabay": _pixabay,
+             "pexels_photos": _pexels_photos, "wikimedia": _wikimedia}
 IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png"}
 
 

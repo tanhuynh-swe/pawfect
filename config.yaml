@@ -152,11 +152,16 @@ voice:
       batch_chars: 260        # carry the line further before resetting prosody
 
 visuals:
-  # Tried in order. pexels and pixabay need a free API key and give the best
-  # footage; wikimedia needs nothing at all and keeps the pipeline working out
-  # of the box. Leave all three on: adding keys later upgrades the footage
-  # automatically, with no config change.
-  providers: [pexels, pixabay, wikimedia]
+  # Tried in order: moving footage first, then stills, which render.py gives a
+  # slow push and drift so they play as footage. A precise photograph beats a
+  # video of roughly the right animal.
+  #
+  # coverr and pixabay need a free key and skip themselves silently without
+  # one, which is why pexels sits below them rather than being removed — a
+  # missing key would otherwise mean no footage at all. wikimedia needs no key
+  # and keeps the pipeline working out of the box, but it is stills only and
+  # its animal photographs are often wild rather than domestic, so it is last.
+  providers: [coverr, pixabay, pexels, pexels_photos, wikimedia]
   orientation: landscape
   # Preferred long edge. Below this the next-best file is taken anyway, but
   # nothing under 1280 is ever accepted: upscaled to 1080p it looks like a
@@ -165,9 +170,12 @@ visuals:
   # Above this a clip is only used when there is no smaller version. 4K stock
   # is a slow download and the render immediately scales it back down.
   max_width: 2560
-  # Pixabay's default ordering is weighted by lifetime downloads, which keeps
-  # surfacing footage uploaded a decade ago. Newest-first looks current.
-  prefer_recent: true
+  # Leave this off. Pixabay's newest-first ordering all but ignores the search
+  # term — asked for a cat in a box it returns kebab cooking and glaciers.
+  prefer_recent: false
+  # Skip Pixabay clips tagged "ai generated". Synthetic animals undercut a
+  # channel about what real pets do.
+  exclude_ai: true
   # Tried between the scene's own query and the bare noun, so a filler shot is
   # still an animal doing something ridiculous rather than a stock-photo pose.
   # Skipped automatically on medical and safety beats.
