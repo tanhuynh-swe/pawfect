@@ -390,6 +390,13 @@ def leg(canvas, hx: float, hy: float, swing: float, s: float,
     for paint in (fill(shade), stroke(INK, ink(s, 0.75))):
         canvas.drawOval(skia.Rect.MakeLTRB(hx + swing - 20 * s, py0,
                                            hx + swing + 20 * s, py1), paint)
+    # Toe lines. A bare oval reads as the end of a tube; two short creases
+    # read as a paw, and cost one stroke each.
+    for tx in (-6.5, 6.5):
+        toe = skia.Path()
+        toe.moveTo(hx + swing + tx * s, py1 - (py1 - py0) * 0.52)
+        toe.lineTo(hx + swing + tx * s, py1 - (py1 - py0) * 0.10)
+        canvas.drawPath(toe, stroke(INK, ink(s, 0.5)))
 
 
 def tail(canvas, x: float, y: float, s: float, tipx: float, tipy: float) -> None:
@@ -528,9 +535,11 @@ def dog_sleeping(canvas, x: float, y: float, t: float, s: float = 1.0,
     for i in range(3):
         a = t * (1.5 if snore else 0.9) + i * 1.1
         drift = (a % 3.0) / 3.0
-        zx = x - 40 * s + math.sin(a * 2) * 20 * s
-        zy = y - 120 * s - drift * 250 * s
         size = (30 + i * 15) * s * (1.25 if snore else 1.0)
+        zx = x - 56 * s + math.sin(a * 2) * 20 * s
+        # Offset by its own size: a Z is drawn downward from this point, so
+        # anchoring the top put the smallest one across the ear.
+        zy = y - 132 * s - drift * 250 * s - size
         z = skia.Path()
         z.moveTo(zx, zy)
         z.lineTo(zx + size, zy)
@@ -615,23 +624,32 @@ def _u(w: int) -> float:
 
 
 def room(canvas, w: int, h: int, night: bool = False) -> None:
-    """Wall gradient, floor, boards. One draw call each, no cached bitmap."""
+    """Wall gradient, floor, boards. One draw call each, no cached bitmap.
+
+    Drawn with an overscan margin. The close-ups push the camera in around a
+    focal point near the floor, which maps the room's own bottom edge to
+    about 85% of the frame height and left a bare band of canvas below it -
+    15% of the picture, for as long as the shot ran. The canvas clips
+    anything off-frame, so no other scene is affected, and the gradients stay
+    anchored to the real frame so the colours inside it do not shift.
+    """
     u = _u(w)
     floor_y = h * 0.70
-    canvas.drawRect(skia.Rect.MakeLTRB(0, 0, w, floor_y),
+    over = h * 0.6
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, -over, w + over, floor_y),
                     grad((0, 0), (0, floor_y),
                          NIGHT_TOP if night else WALL_TOP,
                          NIGHT_BOT if night else WALL_BOT))
-    canvas.drawRect(skia.Rect.MakeLTRB(0, floor_y, w, h),
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y, w + over, h + over),
                     grad((0, floor_y), (0, h),
                          NIGHT_FLOOR if night else FLOOR,
                          (60, 58, 82) if night else FLOOR_DARK))
-    canvas.drawRect(skia.Rect.MakeLTRB(0, floor_y - 16 * u, w, floor_y),
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y - 16 * u, w + over, floor_y),
                     fill((54, 54, 76) if night else FLOOR_DARK))
     line = fill((62, 62, 84) if night else FLOOR_LINE)
     yy = floor_y + 90 * u
-    while yy < h:
-        canvas.drawRect(skia.Rect.MakeLTRB(0, yy, w, yy + 5 * u), line)
+    while yy < h + over:
+        canvas.drawRect(skia.Rect.MakeLTRB(-over, yy, w + over, yy + 5 * u), line)
         yy += 130 * u
 
 
@@ -773,10 +791,10 @@ def box(canvas, bx: float, by: float, bw: float, bh: float, u: float) -> None:
     soft_shadow(canvas, bx + bw / 2, by + bh + 12 * u, bw * 1.15, 60 * u,
                 FLOOR_DARK, 16 * u)
     for flap in (
-        [(bx - 76 * u, by - 76 * u), (bx + 128 * u, by - 76 * u),
-         (bx + 62 * u, by), (bx, by)],
-        [(bx + bw + 76 * u, by - 76 * u), (bx + bw - 128 * u, by - 76 * u),
-         (bx + bw - 62 * u, by), (bx + bw, by)],
+        [(bx - 76 * u, by - 76 * u), (bx + 96 * u, by - 76 * u),
+         (bx + 48 * u, by), (bx, by)],
+        [(bx + bw + 76 * u, by - 76 * u), (bx + bw - 96 * u, by - 76 * u),
+         (bx + bw - 48 * u, by), (bx + bw, by)],
     ):
         p = skia.Path()
         p.moveTo(*flap[0])
@@ -805,7 +823,7 @@ def scene_box(canvas, w, h, t):
     bob = math.sin(t * 2.0) * 9 * u
     # High enough that the whole face clears the rim. At the Pillow
     # backend's -34u the box front cut the muzzle off at the eyes.
-    head(canvas, bx + bw * 0.60, by - 96 * u + bob, 1.55 * u * HEAD,
+    head(canvas, bx + bw * 0.50, by - 96 * u + bob, 1.55 * u * HEAD,
          blink=(math.sin(t * 2.1) + 1) / 2)
     box(canvas, bx, by, bw, bh, u)
 
