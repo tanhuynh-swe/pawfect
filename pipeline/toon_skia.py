@@ -167,12 +167,12 @@ def _ear_path(hx: float, hy: float, s: float, lift: float) -> skia.Path:
         # Tall and vertical. The first pass drew a small ear angled back,
         # which on a long muzzle is a rodent's silhouette. The base sits at
         # hy - 24s so it is buried under the skull rather than perched on it.
-        top = hy - 104 * s - lift * s * 0.4
-        p.moveTo(hx - 58 * s, top + 80 * s)
-        p.cubicTo(hx - 58 * s, top + 22 * s, hx - 46 * s, top + 2 * s,
-                  hx - 22 * s, top + 20 * s)
-        p.cubicTo(hx - 4 * s, top + 36 * s, hx - 8 * s, top + 62 * s,
-                  hx - 16 * s, top + 84 * s)
+        top = hy - 112 * s - lift * s * 0.4
+        p.moveTo(hx - 58 * s, top + 88 * s)
+        p.cubicTo(hx - 58 * s, top + 26 * s, hx - 46 * s, top + 2 * s,
+                  hx - 20 * s, top + 22 * s)
+        p.cubicTo(hx - 2 * s, top + 38 * s, hx - 6 * s, top + 66 * s,
+                  hx - 14 * s, top + 92 * s)
         p.close()
         return p
     top = hy - 40 * s - lift * s
@@ -221,25 +221,49 @@ def _skull_path(hx: float, hy: float, s: float) -> skia.Path:
     return p
 
 
+def _ear_inner(hx: float, hy: float, s: float, lift: float,
+               far: bool) -> skia.Path:
+    """The pink inside an ear, inset from its outline.
+
+    Scaling the outer path about the ear's base put this where the skull
+    covers it - the whole tint came to about fifty visible pixels. An inset
+    path of its own sits up in the tip, which is the part that clears the
+    head, and is what makes an ear read as an ear rather than a brown horn.
+    """
+    p = skia.Path()
+    if far:
+        top = hy - 108 * s - lift * s * 0.4
+        p.moveTo(hx + 30 * s, top + 74 * s)
+        p.cubicTo(hx + 32 * s, top + 32 * s, hx + 44 * s, top + 16 * s,
+                  hx + 58 * s, top + 34 * s)
+        p.cubicTo(hx + 68 * s, top + 46 * s, hx + 62 * s, top + 60 * s,
+                  hx + 56 * s, top + 76 * s)
+    else:
+        top = hy - 112 * s - lift * s * 0.4
+        p.moveTo(hx - 46 * s, top + 80 * s)
+        p.cubicTo(hx - 46 * s, top + 34 * s, hx - 38 * s, top + 18 * s,
+                  hx - 21 * s, top + 36 * s)
+        p.cubicTo(hx - 10 * s, top + 48 * s, hx - 14 * s, top + 62 * s,
+                  hx - 20 * s, top + 82 * s)
+    p.close()
+    return p
+
+
 def _second_ear(canvas, hx: float, hy: float, s: float, lift: float) -> None:
     """Cats read front-on enough that the far ear should show."""
     if not is_cat():
         return
-    top = hy - 100 * s - lift * s * 0.4
+    top = hy - 108 * s - lift * s * 0.4
     p = skia.Path()
-    p.moveTo(hx + 20 * s, top + 78 * s)
-    p.cubicTo(hx + 22 * s, top + 20 * s, hx + 40 * s, top + 0 * s,
-              hx + 62 * s, top + 20 * s)
-    p.cubicTo(hx + 78 * s, top + 36 * s, hx + 72 * s, top + 60 * s,
-              hx + 62 * s, top + 82 * s)
+    p.moveTo(hx + 20 * s, top + 82 * s)
+    p.cubicTo(hx + 22 * s, top + 22 * s, hx + 40 * s, top + 0 * s,
+              hx + 62 * s, top + 22 * s)
+    p.cubicTo(hx + 78 * s, top + 38 * s, hx + 72 * s, top + 62 * s,
+              hx + 62 * s, top + 86 * s)
     p.close()
     canvas.drawPath(p, fill(FUR_SHADE))
     canvas.drawPath(p, stroke(INK, ink(s)))
-    inner = skia.Path(p)
-    m = skia.Matrix()
-    m.setScale(0.56, 0.56, hx + 42 * s, top + 78 * s)
-    inner.transform(m)
-    canvas.drawPath(inner, fill(BLUSH, 170))
+    canvas.drawPath(_ear_inner(hx, hy, s, lift, far=True), fill(BLUSH, 190))
 
 
 def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
@@ -247,13 +271,21 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
     lw = ink(s)
     ip = stroke(INK, lw)
 
+    # A cat's head here is round and shows both ears, so it reads front-on,
+    # and every feature has to sit symmetrically about the skull's own
+    # centre. Each one had inherited the dog's forward bias independently:
+    # the skull centres on hx + 11, but the eyes averaged hx - 4, the muzzle
+    # pad sat at hx + 39, the nose at hx + 48 and the open mouth at hx + 59.
+    # On a face that reads front-on that is not perspective, it is a squint.
+    cx = hx + 11 * s
+
     _second_ear(canvas, hx, hy, s, lift)
     ear = _ear_path(hx, hy, s, lift)
     canvas.drawPath(ear, fill(FUR_SHADE))
     canvas.drawPath(ear, ip)
-    # Only the ear _second_ear draws gets a pink inner. This one sits behind
-    # the skull, which is drawn over it, so tinting it showed a 50-pixel
-    # sliver of pink and nothing more.
+    if is_cat():
+        canvas.drawPath(_ear_inner(hx, hy, s, lift, far=False),
+                        fill(BLUSH, 190))
 
     skull = _skull_path(hx, hy, s)
     canvas.drawPath(skull, grad((hx, hy - 70 * s), (hx, hy + 60 * s),
@@ -262,11 +294,11 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
 
     # muzzle, lighter, tucked under the skull curve
     if is_cat():
-        canvas.drawOval(skia.Rect.MakeLTRB(hx + 8 * s, hy + 14 * s,
-                                           hx + 70 * s, hy + 58 * s),
+        canvas.drawOval(skia.Rect.MakeLTRB(cx - 31 * s, hy + 14 * s,
+                                           cx + 31 * s, hy + 58 * s),
                         fill(FUR_BELLY))
-        canvas.drawOval(skia.Rect.MakeLTRB(hx + 10 * s, hy + 6 * s,
-                                           hx + 54 * s, hy + 42 * s),
+        canvas.drawOval(skia.Rect.MakeLTRB(cx - 22 * s, hy + 6 * s,
+                                           cx + 22 * s, hy + 42 * s),
                         fill(FUR_BELLY))
     muzzle = skia.Path()
     muzzle.moveTo(hx + 36 * s, hy + 8 * s)
@@ -281,38 +313,59 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
     # cheek blush, the cheapest cuteness cue there is
     bl = fill(BLUSH, 95)
     bl.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 11 * s))
-    bx = hx - 14 * s if is_cat() else hx
-    canvas.drawOval(skia.Rect.MakeLTRB(bx + 4 * s, hy + 14 * s,
-                                       bx + 46 * s, hy + 38 * s), bl)
+    if is_cat():
+        for side in (-1, 1):
+            canvas.drawOval(
+                skia.Rect.MakeLTRB(cx + side * 30 * s - 21 * s, hy + 12 * s,
+                                   cx + side * 30 * s + 21 * s, hy + 36 * s), bl)
+    else:
+        canvas.drawOval(skia.Rect.MakeLTRB(hx + 4 * s, hy + 14 * s,
+                                           hx + 46 * s, hy + 38 * s), bl)
 
     if mouth > 0.02:
-        # A dog's jaw opens along the muzzle; a cat has no muzzle to open
-        # along, so the whole mouth is shorter and sits under the nose.
-        gap = (44 if is_cat() else 56) * s * mouth
-        x0, x1 = (36, 82) if is_cat() else (44, 104)
-        m = skia.Path()
-        m.moveTo(hx + x0 * s, hy + 28 * s)
-        m.cubicTo(hx + (x0 + x1) / 2 * s, hy + 24 * s, hx + x1 * s, hy + 26 * s,
-                  hx + x1 * s, hy + 30 * s)
-        m.cubicTo(hx + x1 * s, hy + 30 * s + gap,
-                  hx + (x0 + x1) / 2 * s, hy + 26 * s + gap,
-                  hx + x0 * s, hy + 28 * s)
-        m.close()
-        canvas.drawPath(m, fill(MOUTH))
-        canvas.drawPath(m, stroke(INK, ink(s, 0.7)))
-        t = skia.Path()
-        t.addOval(skia.Rect.MakeLTRB(hx + (x0 + 14) * s, hy + 28 * s + gap * 0.35,
-                                     hx + (x1 - 8) * s, hy + 28 * s + gap * 0.95))
-        canvas.drawPath(t, fill(TONGUE))
+        # A dog's jaw opens along the muzzle, so its mouth is drawn sideways.
+        # A cat has no muzzle to open along and is seen front-on, so its
+        # mouth is a symmetric shape that drops straight down from the nose.
+        if is_cat():
+            gap = 40 * s * mouth
+            m = skia.Path()
+            m.moveTo(cx - 23 * s, hy + 26 * s)
+            m.quadTo(cx, hy + 21 * s, cx + 23 * s, hy + 26 * s)
+            m.quadTo(cx + 15 * s, hy + 31 * s + gap, cx, hy + 33 * s + gap)
+            m.quadTo(cx - 15 * s, hy + 31 * s + gap, cx - 23 * s, hy + 26 * s)
+            m.close()
+            canvas.drawPath(m, fill(MOUTH))
+            canvas.drawPath(m, stroke(INK, ink(s, 0.7)))
+            t = skia.Path()
+            t.addOval(skia.Rect.MakeLTRB(cx - 13 * s, hy + 27 * s + gap * 0.40,
+                                         cx + 13 * s, hy + 31 * s + gap * 1.0))
+            canvas.drawPath(t, fill(TONGUE))
+        else:
+            gap = 56 * s * mouth
+            x0, x1 = 44, 104
+            m = skia.Path()
+            m.moveTo(hx + x0 * s, hy + 28 * s)
+            m.cubicTo(hx + (x0 + x1) / 2 * s, hy + 24 * s, hx + x1 * s, hy + 26 * s,
+                      hx + x1 * s, hy + 30 * s)
+            m.cubicTo(hx + x1 * s, hy + 30 * s + gap,
+                      hx + (x0 + x1) / 2 * s, hy + 26 * s + gap,
+                      hx + x0 * s, hy + 28 * s)
+            m.close()
+            canvas.drawPath(m, fill(MOUTH))
+            canvas.drawPath(m, stroke(INK, ink(s, 0.7)))
+            t = skia.Path()
+            t.addOval(skia.Rect.MakeLTRB(hx + (x0 + 14) * s, hy + 28 * s + gap * 0.35,
+                                         hx + (x1 - 8) * s, hy + 28 * s + gap * 0.95))
+            canvas.drawPath(t, fill(TONGUE))
 
     # nose
     if is_cat():
-        nx, ny = hx + 48 * s, hy + 20 * s
+        nx, ny = cx, hy + 20 * s
         tri = skia.Path()
-        tri.moveTo(nx - 15 * s, ny - 5 * s)
-        tri.quadTo(nx, ny - 12 * s, nx + 15 * s, ny - 5 * s)
-        tri.quadTo(nx + 13 * s, ny + 13 * s, nx, ny + 15 * s)
-        tri.quadTo(nx - 13 * s, ny + 13 * s, nx - 15 * s, ny - 5 * s)
+        tri.moveTo(nx - 13 * s, ny - 5 * s)
+        tri.quadTo(nx, ny - 11 * s, nx + 13 * s, ny - 5 * s)
+        tri.quadTo(nx + 11 * s, ny + 11 * s, nx, ny + 13 * s)
+        tri.quadTo(nx - 11 * s, ny + 11 * s, nx - 13 * s, ny - 5 * s)
         tri.close()
         canvas.drawPath(tri, fill(BLUSH))
         canvas.drawPath(tri, stroke(INK, ink(s, 0.6)))
@@ -326,12 +379,28 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
                 canvas.drawPath(w, stroke(INK, ink(s, 0.6)))
         # Whiskers root beside the nose and stop short of the frame. On the
         # old snout they ran off the tip, which was half the rodent look.
-        for dy, spread in ((-6, 14), (4, 2), (14, -12)):
-            wk = skia.Path()
-            wk.moveTo(nx + 10 * s, ny + dy * s)
-            wk.quadTo(nx + 38 * s, ny + (dy + spread * 0.3) * s,
-                      nx + 70 * s, ny + (dy + spread) * s)
-            canvas.drawPath(wk, stroke(INK, ink(s, 0.45)))
+        # Drawn as a real curve and thinner: three straight lines of even
+        # weight read as wire, not hair.
+        # (start offset, how far it fans by the tip). These have to diverge:
+        # spreads that cancelled the start offset put all three tips on the
+        # same point, which drew one spike instead of three hairs.
+        for side in (1, -1):
+            for dy, spread in ((2, -7), (10, -2), (18, 5)):
+                wk = skia.Path()
+                wk.moveTo(nx + side * 19 * s, ny + dy * s)
+                wk.cubicTo(nx + side * 29 * s, ny + (dy + spread * 0.12) * s,
+                           nx + side * 38 * s, ny + (dy + spread * 0.5) * s,
+                           nx + side * 48 * s, ny + (dy + spread) * s)
+                canvas.drawPath(wk, stroke(INK, ink(s, 0.44)))
+        # Follicle dots. Cheap, and they do more for "cat" than the whiskers.
+        for side in (1, -1):
+            for ddx, ddy in ((21, -1), (25, 6), (21, 13)):
+                canvas.drawOval(
+                    skia.Rect.MakeLTRB(nx + side * ddx * s - 2.2 * s,
+                                       ny + ddy * s - 2.2 * s,
+                                       nx + side * ddx * s + 2.2 * s,
+                                       ny + ddy * s + 2.2 * s),
+                    fill(INK, 150))
     else:
         canvas.drawOval(skia.Rect.MakeLTRB(hx + 76 * s, hy + 12 * s,
                                            hx + 108 * s, hy + 40 * s), fill(INK))
@@ -342,30 +411,60 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
     # brow and eye. A cat's face is 34 units shorter, so the eye would
     # otherwise sit on the edge of it: everything here shifts back by `ex`.
     ex = hx - 16 * s if is_cat() else hx
-    brow = skia.Path()
-    brow.moveTo(ex + 6 * s, hy - 40 * s)
-    brow.quadTo(ex + 26 * s, hy - 50 * s, ex + 44 * s, hy - 38 * s)
-    canvas.drawPath(brow, stroke(INK, ink(s, 0.8)))
+    if not is_cat():
+        brow = skia.Path()
+        brow.moveTo(ex + 6 * s, hy - 40 * s)
+        brow.quadTo(ex + 26 * s, hy - 50 * s, ex + 44 * s, hy - 38 * s)
+        canvas.drawPath(brow, stroke(INK, ink(s, 0.8)))
 
-    if asleep:
-        e = skia.Path()
-        e.moveTo(ex + 10 * s, hy - 14 * s)
-        e.quadTo(ex + 28 * s, hy + 2 * s, ex + 46 * s, hy - 14 * s)
-        canvas.drawPath(e, stroke(INK, ink(s, 0.85)))
-    elif blink > 0.995:
-        e = skia.Path()
-        e.moveTo(ex + 14 * s, hy - 14 * s)
-        e.lineTo(ex + 42 * s, hy - 14 * s)
-        canvas.drawPath(e, stroke(INK, ink(s, 0.85)))
+    # The far eye, and a brow over it. A dog's long muzzle reads as a true
+    # profile and one eye is right; a cat's face is round enough to read
+    # front-on, and a single eye on it looks like a mistake rather than a
+    # viewing angle. The far one is smaller and set back, which is what
+    # turns the same head into a three-quarter view.
+    if asleep or blink > 0.995:
+        if is_cat():
+            for side in (-1, 1):
+                _eye_closed(canvas, cx + side * 26 * s, hy - 8 * s, 15 * s, s)
+        else:
+            _eye_closed(canvas, ex + 37 * s, hy - 8 * s, 16 * s, s)
     else:
-        canvas.drawOval(skia.Rect.MakeLTRB(ex + 18 * s, hy - 28 * s,
-                                           ex + 56 * s, hy + 12 * s), fill(INK))
-        canvas.drawOval(skia.Rect.MakeLTRB(ex + 38 * s, hy - 22 * s,
-                                           ex + 52 * s, hy - 8 * s),
-                        fill((255, 255, 255)))
-        canvas.drawOval(skia.Rect.MakeLTRB(ex + 24 * s, hy - 2 * s,
-                                           ex + 33 * s, hy + 7 * s),
-                        fill((255, 255, 255), 215))
+        if is_cat():
+            for side in (-1, 1):
+                _eye(canvas, cx + side * 26 * s, hy - 8 * s, 18 * s, 19 * s, s)
+        else:
+            _eye(canvas, ex + 37 * s, hy - 8 * s, 19 * s, 20 * s, s)
+
+
+def _eye_closed(canvas, cx: float, cy: float, rw: float, s: float,
+                weight: float = 1.15) -> None:
+    """A shut eye: a short, deep, downward curve centred on the open eye.
+
+    Drawn wide and shallow it reads as a crease or a brow rather than a lid,
+    which is what two long flat arcs high on the face were doing. Narrow and
+    deep, on the same centre the open eye uses, reads as shut and content.
+    """
+    e = skia.Path()
+    e.moveTo(cx - rw, cy - rw * 0.34)
+    e.quadTo(cx, cy + rw * 0.76, cx + rw, cy - rw * 0.34)
+    canvas.drawPath(e, stroke(INK, ink(s, weight)))
+
+
+def _eye(canvas, cx: float, cy: float, rw: float, rh: float,
+         s: float, alpha: int = 255) -> None:
+    """One eye: dark iris, a big catchlight high on it, a small one low.
+
+    Two lights rather than one is most of what stops a flat disc reading as
+    a dead button - the upper one is the light source, the lower a bounce.
+    """
+    canvas.drawOval(skia.Rect.MakeLTRB(cx - rw, cy - rh, cx + rw, cy + rh),
+                    fill(INK, alpha))
+    canvas.drawOval(skia.Rect.MakeLTRB(cx + rw * 0.10, cy - rh * 0.72,
+                                       cx + rw * 0.78, cy - rh * 0.10),
+                    fill((255, 255, 255), alpha))
+    canvas.drawOval(skia.Rect.MakeLTRB(cx - rw * 0.66, cy + rh * 0.22,
+                                       cx - rw * 0.18, cy + rh * 0.70),
+                    fill((255, 255, 255), min(alpha, 215)))
 
 
 def collar(canvas, x: float, y: float, s: float) -> None:
@@ -407,8 +506,8 @@ def tail(canvas, x: float, y: float, s: float, tipx: float, tipy: float) -> None
         # hooked it was a mouse's tail, and no amount of ear fixed that.
         p.cubicTo(x - 152 * s, y - 72 * s, x - 176 * s, y - 134 * s,
                   tipx + 8 * s, tipy - 20 * s)
-        canvas.drawPath(p, stroke(INK, ink(s, 3.4)))
-        canvas.drawPath(p, stroke(FUR_SHADE, ink(s, 2.2)))
+        canvas.drawPath(p, stroke(INK, ink(s, 5.4)))
+        canvas.drawPath(p, stroke(FUR_SHADE, ink(s, 4.0)))
         return
     p.quadTo(x - 150 * s, y - 92 * s, tipx, tipy)
     canvas.drawPath(p, stroke(INK, ink(s, 3.6)))
