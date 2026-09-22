@@ -815,14 +815,16 @@ CAT_WORDS = (
 )
 
 
-def species_for(query: str) -> str:
-    """"dog" unless the query is clearly about a cat.
+def species_for(query: str, dog: str = "dog") -> str:
+    """"cat" when the query is clearly about a cat, otherwise `dog`.
 
-    Dog is the default because the channel is dog-led and an unmarked query
-    ("zoomies at 3am") is far more likely to be one.
+    A dog is the default because the channel is dog-led and an unmarked
+    query ("zoomies at 3am") is far more likely to be one. `dog` names which
+    dog character to draw, so the channel picks its own animal once in
+    config instead of in every script.
     """
     words = query.lower().replace("-", " ").split()
-    return "cat" if any(w.startswith(CAT_WORDS) for w in words) else "dog"
+    return "cat" if any(w.startswith(CAT_WORDS) for w in words) else dog
 
 
 def scene_for(query: str) -> str:

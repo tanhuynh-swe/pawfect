@@ -609,14 +609,16 @@ def fetch_clip(query: str, index: int, seconds: float, cfg: dict[str, Any],
         except ImportError:
             backend = toon
             engine = "pillow"
-        species = toon.species_for(query)
-        if species == "cat" and engine == "pillow":
-            # Only the Skia character has a cat. Drawing one with the Pillow
-            # backend would put a dog under cat narration, which is the whole
-            # mismatch this renderer exists to remove, so say so rather than
-            # let it pass quietly.
-            print(f"    shot {index}: WARNING '{query}' is a cat, but the "
-                  f"Pillow backend only draws dogs — install skia-python")
+        species = toon.species_for(
+            query, str(cfg["visuals"].get("toon_dog", "greydog")))
+        if species != "dog" and engine == "pillow":
+            # Only the Skia backend has the cat and the channel's own dog.
+            # Pillow would quietly draw the tan puppy instead, which for a
+            # cat script is the whole mismatch this renderer exists to
+            # remove, so say so rather than let it pass.
+            print(f"    shot {index}: WARNING '{query}' wants the {species} "
+                  f"character, but the Pillow backend only draws the tan "
+                  f"dog — install skia-python")
         # Consecutive shots of the same scene used to restart the animation
         # clock and the camera, so a run of three sleeping shots cut like a
         # glitch. Carrying the elapsed time and camera phase across the run

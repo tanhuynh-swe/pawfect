@@ -103,16 +103,47 @@ def ink(s: float, mult: float = 1.0) -> float:
 # is the same mismatch this module exists to prevent. The difference between
 # the two is small and local: ears, tail, muzzle and whiskers. Everything else
 # - body, legs, poses, scenes, camera - is shared.
+# The channel's own dog is a grey village dog: black pricked ears, a dark
+# crown and saddle, a white muzzle and chest, and a tail that curls over its
+# back. The tan floppy-eared puppy this module started with is kept as its
+# own character rather than replaced, so either can be used.
+#
+# The coat swaps by rebinding the FUR_* globals. Every drawing call reads
+# them at call time and nothing captures them in a default argument, so one
+# table recolours the whole character without touching the 39 draw sites.
+TAN_COAT = ((228, 172, 116), (208, 148, 92), (176, 116, 68), (240, 204, 160))
+GREY_COAT = ((198, 192, 184), (170, 164, 156), (138, 132, 126), (226, 221, 213))
+COATS = {"dog": TAN_COAT, "cat": TAN_COAT, "greydog": GREY_COAT}
+
+# Ears, crown, saddle and tail, and the white of the muzzle and chest.
+# Sampled off the reference footage and lifted: the originals sit around
+# (120, 116, 110) and read as mud once compressed to a phone feed.
+MARK_DARK = (74, 70, 68)
+MARK_SOFT = (104, 99, 95)
+MARK_WHITE = (245, 242, 236)
+
+CHARACTERS = ("dog", "cat", "greydog")
 SPECIES = "dog"
 
 
 def use_species(name: str) -> None:
-    global SPECIES
-    SPECIES = "cat" if name == "cat" else "dog"
+    global SPECIES, FUR_LIT, FUR, FUR_SHADE, FUR_BELLY
+    SPECIES = name if name in CHARACTERS else "dog"
+    FUR_LIT, FUR, FUR_SHADE, FUR_BELLY = COATS[SPECIES]
 
 
 def is_cat() -> bool:
     return SPECIES == "cat"
+
+
+def is_greydog() -> bool:
+    """The channel's own dog. A dog everywhere except ears, tail and markings."""
+    return SPECIES == "greydog"
+
+
+def prick_ears() -> bool:
+    """Upright and triangular, as opposed to hanging."""
+    return SPECIES in ("cat", "greydog")
 
 
 HEAD = 1.32      # head scale relative to the body
@@ -163,6 +194,18 @@ def _ear_path(hx: float, hy: float, s: float, lift: float) -> skia.Path:
     is why it is worth branching here rather than drawing a second character.
     """
     p = skia.Path()
+    if is_greydog():
+        # Broader-based and larger than the cat's: a dog's prick ear reads as
+        # a wide triangle, and these are the single clearest marker of which
+        # dog this is.
+        top = hy - 130 * s - lift * s * 0.4
+        p.moveTo(hx - 56 * s, top + 96 * s)
+        p.cubicTo(hx - 56 * s, top + 30 * s, hx - 44 * s, top + 2 * s,
+                  hx - 16 * s, top + 24 * s)
+        p.cubicTo(hx + 4 * s, top + 42 * s, hx - 2 * s, top + 72 * s,
+                  hx - 10 * s, top + 100 * s)
+        p.close()
+        return p
     if is_cat():
         # Tall and vertical. The first pass drew a small ear angled back,
         # which on a long muzzle is a rodent's silhouette. The base sits at
@@ -194,6 +237,24 @@ def _skull_path(hx: float, hy: float, s: float) -> skia.Path:
     and every feature in front of the eyes moves back with it.
     """
     p = skia.Path()
+    if is_greydog():
+        # Between the two: a broader crown and a shorter, blunter muzzle than
+        # the tan dog's, which came out longer and more pointed than the
+        # reference animal's. Not the cat's flat face either - it still has a
+        # muzzle, it is just a stubbier one.
+        p.moveTo(hx - 62 * s, hy - 14 * s)
+        p.cubicTo(hx - 62 * s, hy - 66 * s, hx + 14 * s, hy - 78 * s,
+                  hx + 50 * s, hy - 50 * s)          # broad crown
+        p.cubicTo(hx + 76 * s, hy - 28 * s, hx + 80 * s, hy + 6 * s,
+                  hx + 94 * s, hy + 10 * s)          # into the muzzle
+        p.cubicTo(hx + 106 * s, hy + 14 * s, hx + 106 * s, hy + 42 * s,
+                  hx + 86 * s, hy + 46 * s)          # blunt front
+        p.cubicTo(hx + 56 * s, hy + 52 * s, hx + 48 * s, hy + 60 * s,
+                  hx + 8 * s, hy + 60 * s)           # jaw
+        p.cubicTo(hx - 36 * s, hy + 60 * s, hx - 62 * s, hy + 26 * s,
+                  hx - 62 * s, hy - 14 * s)
+        p.close()
+        return p
     if is_cat():
         p.moveTo(hx - 62 * s, hy - 12 * s)
         p.cubicTo(hx - 64 * s, hy - 68 * s, hx + 10 * s, hy - 80 * s,
@@ -231,6 +292,23 @@ def _ear_inner(hx: float, hy: float, s: float, lift: float,
     head, and is what makes an ear read as an ear rather than a brown horn.
     """
     p = skia.Path()
+    if is_greydog():
+        if far:
+            top = hy - 124 * s - lift * s * 0.4
+            p.moveTo(hx + 38 * s, top + 86 * s)
+            p.cubicTo(hx + 40 * s, top + 38 * s, hx + 54 * s, top + 20 * s,
+                      hx + 68 * s, top + 40 * s)
+            p.cubicTo(hx + 78 * s, top + 54 * s, hx + 72 * s, top + 70 * s,
+                      hx + 66 * s, top + 88 * s)
+        else:
+            top = hy - 130 * s - lift * s * 0.4
+            p.moveTo(hx - 44 * s, top + 92 * s)
+            p.cubicTo(hx - 44 * s, top + 42 * s, hx - 34 * s, top + 22 * s,
+                      hx - 15 * s, top + 42 * s)
+            p.cubicTo(hx - 4 * s, top + 56 * s, hx - 8 * s, top + 72 * s,
+                      hx - 14 * s, top + 94 * s)
+        p.close()
+        return p
     if far:
         top = hy - 108 * s - lift * s * 0.4
         p.moveTo(hx + 30 * s, top + 74 * s)
@@ -250,8 +328,21 @@ def _ear_inner(hx: float, hy: float, s: float, lift: float,
 
 
 def _second_ear(canvas, hx: float, hy: float, s: float, lift: float) -> None:
-    """Cats read front-on enough that the far ear should show."""
-    if not is_cat():
+    """A prick-eared head reads front-on enough that the far ear should show."""
+    if not prick_ears():
+        return
+    if is_greydog():
+        top = hy - 124 * s - lift * s * 0.4
+        p = skia.Path()
+        p.moveTo(hx + 26 * s, top + 92 * s)
+        p.cubicTo(hx + 28 * s, top + 26 * s, hx + 48 * s, top + 2 * s,
+                  hx + 72 * s, top + 26 * s)
+        p.cubicTo(hx + 88 * s, top + 44 * s, hx + 82 * s, top + 70 * s,
+                  hx + 72 * s, top + 96 * s)
+        p.close()
+        canvas.drawPath(p, fill(MARK_DARK))
+        canvas.drawPath(p, stroke(INK, ink(s)))
+        canvas.drawPath(_ear_inner(hx, hy, s, lift, far=True), fill(MARK_SOFT))
         return
     top = hy - 108 * s - lift * s * 0.4
     p = skia.Path()
@@ -281,15 +372,31 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
 
     _second_ear(canvas, hx, hy, s, lift)
     ear = _ear_path(hx, hy, s, lift)
-    canvas.drawPath(ear, fill(FUR_SHADE))
+    canvas.drawPath(ear, fill(MARK_DARK if is_greydog() else FUR_SHADE))
     canvas.drawPath(ear, ip)
-    if is_cat():
+    if prick_ears():
         canvas.drawPath(_ear_inner(hx, hy, s, lift, far=False),
-                        fill(BLUSH, 190))
+                        fill(MARK_SOFT if is_greydog() else BLUSH,
+                             255 if is_greydog() else 190))
 
     skull = _skull_path(hx, hy, s)
     canvas.drawPath(skull, grad((hx, hy - 70 * s), (hx, hy + 60 * s),
                                 FUR_LIT, FUR))
+    if is_greydog():
+        # A dark crown, clipped to the skull so it cannot spill past the
+        # outline. It stops above the brow: carried down over the eye, as the
+        # real dog's mask does, a dark eye on a dark mask stops reading.
+        canvas.save()
+        canvas.clipPath(skull, doAntiAlias=True)
+        cap = skia.Path()
+        cap.moveTo(hx - 70 * s, hy - 44 * s)
+        cap.cubicTo(hx - 40 * s, hy - 28 * s, hx + 20 * s, hy - 36 * s,
+                    hx + 62 * s, hy - 56 * s)
+        cap.lineTo(hx + 80 * s, hy - 100 * s)
+        cap.lineTo(hx - 70 * s, hy - 100 * s)
+        cap.close()
+        canvas.drawPath(cap, fill(MARK_SOFT, 200))
+        canvas.restore()
     canvas.drawPath(skull, ip)
 
     # muzzle, lighter, tucked under the skull curve
@@ -308,7 +415,7 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
                    hx + 38 * s, hy + 42 * s)
     muzzle.close()
     if not is_cat():
-        canvas.drawPath(muzzle, fill(FUR_BELLY))
+        canvas.drawPath(muzzle, fill(MARK_WHITE if is_greydog() else FUR_BELLY))
 
     # cheek blush, the cheapest cuteness cue there is
     bl = fill(BLUSH, 95)
@@ -402,10 +509,12 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
                                        ny + ddy * s + 2.2 * s),
                     fill(INK, 150))
     else:
-        canvas.drawOval(skia.Rect.MakeLTRB(hx + 76 * s, hy + 12 * s,
-                                           hx + 108 * s, hy + 40 * s), fill(INK))
-        canvas.drawOval(skia.Rect.MakeLTRB(hx + 83 * s, hy + 17 * s,
-                                           hx + 93 * s, hy + 25 * s),
+        n0 = 68 if is_greydog() else 76
+        canvas.drawOval(skia.Rect.MakeLTRB(hx + n0 * s, hy + 12 * s,
+                                           hx + (n0 + 32) * s, hy + 40 * s),
+                        fill(INK))
+        canvas.drawOval(skia.Rect.MakeLTRB(hx + (n0 + 7) * s, hy + 17 * s,
+                                           hx + (n0 + 17) * s, hy + 25 * s),
                         fill((152, 134, 126)))
 
     # brow and eye. A cat's face is 34 units shorter, so the eye would
@@ -501,6 +610,17 @@ def leg(canvas, hx: float, hy: float, swing: float, s: float,
 def tail(canvas, x: float, y: float, s: float, tipx: float, tipy: float) -> None:
     p = skia.Path()
     p.moveTo(x - 88 * s, y - 40 * s)
+    if is_greydog():
+        # Curls up and forward over the back, and it is dark like the ears.
+        # `tipx`/`tipy` still steer it so the wag in each pose still reads,
+        # but the curve returns over the spine instead of trailing behind.
+        p.cubicTo(x - 136 * s, y - 86 * s, x - 126 * s, y - 152 * s,
+                  x - 66 * s, y - 156 * s)
+        p.cubicTo(x - 32 * s, y - 158 * s, x - 14 * s, y - 136 * s,
+                  x - 20 * s, y - 114 * s + (tipy - y) * 0.06)
+        canvas.drawPath(p, stroke(INK, ink(s, 5.6)))
+        canvas.drawPath(p, stroke(MARK_DARK, ink(s, 4.2)))
+        return
     if is_cat():
         # Longer and higher than a dog's, but just as thick. Drawn thin and
         # hooked it was a mouse's tail, and no amount of ear fixed that.
@@ -517,10 +637,33 @@ def tail(canvas, x: float, y: float, s: float, tipx: float, tipy: float) -> None
                                            tipx + 21 * s, tipy + 21 * s), paint)
 
 
+def _saddle(canvas, body: skia.Path, x: float, y: float, s: float,
+            lean: float = 0.0) -> None:
+    """The dark band down the back, clipped to whatever body encloses it.
+
+    Clipping rather than tracing means one shape serves every pose: the
+    saddle cannot leak past a silhouette it was not drawn for.
+    """
+    if not is_greydog():
+        return
+    canvas.save()
+    canvas.clipPath(body, doAntiAlias=True)
+    band = skia.Path()
+    band.moveTo(x - 110 * s, y - 60 * s)
+    band.cubicTo(x - 60 * s, y - 42 * s, x + 30 * s, y - 52 * s,
+                 x + 100 * s, y - 74 * s + lean)
+    band.lineTo(x + 120 * s, y - 150 * s + lean)
+    band.lineTo(x - 120 * s, y - 150 * s)
+    band.close()
+    canvas.drawPath(band, fill(MARK_SOFT, 170))
+    canvas.restore()
+
+
 def _draw_body(canvas, x: float, y: float, s: float, lean: float = 0.0) -> None:
     body = _body_path(x, y, s, lean)
     canvas.drawPath(body, grad((x, y - 92 * s), (x, y + 20 * s),
                                FUR_LIT, FUR_SHADE))
+    _saddle(canvas, body, x, y, s, lean)
     canvas.drawPath(_belly_path(x, y, s, lean), fill(FUR_BELLY))
     canvas.drawPath(body, stroke(INK, ink(s)))
 
@@ -625,6 +768,7 @@ def dog_sleeping(canvas, x: float, y: float, t: float, s: float = 1.0,
     curl.close()
     canvas.drawPath(curl, grad((x, y - 96 * s), (x, y + 50 * s),
                                FUR_LIT, FUR_SHADE))
+    _saddle(canvas, curl, x, y - 24 * s, s)
     canvas.drawPath(curl, stroke(INK, ink(s)))
     tuck = skia.Path()
     tuck.addOval(skia.Rect.MakeLTRB(x - 86 * s, y - 34 * s, x + 96 * s,
@@ -1176,7 +1320,8 @@ def render_clip(query: str, seconds: float, cfg: dict[str, Any],
     w = int(cfg["video"]["width"])
     h = int(cfg["video"]["height"])
     fps = int(cfg["video"]["fps"])
-    use_species(toon.species_for(query))
+    use_species(toon.species_for(
+        query, str(cfg["visuals"].get("toon_dog", "greydog"))))
     name = toon.scene_for(query)
     scene = SCENES.get(name) or SCENES["stand_room"]
 
