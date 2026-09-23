@@ -34,36 +34,47 @@ from typing import Any, Callable
 
 from PIL import Image, ImageDraw
 
-# One palette for the whole channel. Warm, high-contrast, and it survives the
-# heavy compression a phone feed applies.
-PAPER = (250, 238, 219)
-WALL_TOP = (247, 232, 212)
-WALL_BOT = (234, 211, 184)
-FLOOR = (226, 199, 166)
-FLOOR_DARK = (206, 175, 140)
-FLOOR_LINE = (216, 190, 157)
+# One palette for the whole channel, kept in step with the Skia backend so a
+# machine that falls back to Pillow does not also change the channel's
+# colours. Off-white walls over a sage dado, pale oak boards, muted sage
+# upholstery, terracotta and ochre held back as accents: the single warm ramp
+# this started with dated the room, and on a grey dog it left the animal
+# sharing a hue with everything behind it.
+PAPER = (247, 243, 236)
+WALL_TOP = (244, 240, 233)
+WALL_BOT = (232, 227, 218)
+DADO = (208, 218, 206)
+DADO_DARK = (186, 200, 187)
+RAIL = (250, 248, 243)
+FLOOR = (233, 215, 190)
+FLOOR_DARK = (205, 183, 154)
+FLOOR_LINE = (220, 200, 172)
+RUG = (172, 198, 192)
+RUG_LINE = (240, 236, 227)
 FUR = (212, 152, 96)
 FUR_DARK = (176, 118, 70)
 FUR_LIGHT = (236, 194, 148)
-INK = (58, 42, 34)
-ACCENT = (222, 96, 68)
-LEAF = (132, 172, 120)
-LEAF_DARK = (96, 136, 90)
-SKY_TOP = (182, 218, 234)
-SKY_BOT = (224, 240, 242)
-SOFA = (198, 120, 102)
-SOFA_DARK = (168, 94, 80)
-CARD = (214, 172, 120)
-CARD_DARK = (184, 140, 92)
-POT = (188, 118, 88)
-FRAME = (176, 132, 104)
-BED = (168, 126, 158)
-BED_DARK = (144, 104, 136)
-NIGHT_TOP = (52, 58, 94)
-NIGHT_BOT = (84, 86, 122)
-NIGHT_FLOOR = (72, 70, 94)
-NIGHT_SHADOW = (56, 56, 78)
-LAMP = (250, 218, 150)
+INK = (50, 44, 42)
+ACCENT = (214, 106, 78)
+OCHRE = (226, 166, 96)
+LEAF = (128, 168, 126)
+LEAF_DARK = (86, 128, 98)
+SKY_TOP = (166, 208, 228)
+SKY_BOT = (228, 242, 240)
+SOFA = (150, 174, 162)
+SOFA_DARK = (120, 146, 135)
+CARD = (218, 188, 146)
+CARD_DARK = (190, 156, 114)
+POT = (234, 228, 216)
+FRAME = (62, 58, 56)
+BED = (118, 126, 138)
+BED_DARK = (92, 100, 112)
+BARK = (146, 118, 96)
+NIGHT_TOP = (42, 50, 78)
+NIGHT_BOT = (74, 82, 112)
+NIGHT_FLOOR = (62, 64, 90)
+NIGHT_SHADOW = (52, 52, 76)
+LAMP = (252, 224, 158)
 
 # Draw at this multiple of the output size, then downsample. 2 removes most of
 # the stair-stepping; 3 is visibly cleaner on the thin ink lines.
@@ -487,7 +498,8 @@ def _tree(d: ImageDraw.ImageDraw, tx: float, ty: float, horizon: float,
           r: float, u: float) -> None:
     lw = max(1, int(6 * u))
     d.line([(tx, ty), (tx, horizon + 10 * u)], fill=INK, width=max(1, int(44 * u)))
-    d.line([(tx, ty), (tx, horizon + 10 * u)], fill=FUR_DARK,
+    # BARK, not FUR_DARK: the trunk had been painted in a coat colour.
+    d.line([(tx, ty), (tx, horizon + 10 * u)], fill=BARK,
            width=max(1, int(32 * u)))
     d.ellipse([tx - r, ty - r, tx + r, ty + r * 0.7], fill=LEAF_DARK,
               outline=INK, width=lw)

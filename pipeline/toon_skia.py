@@ -26,36 +26,53 @@ from typing import Any
 
 import skia
 
-# Same palette as the Pillow backend, so the two can be compared directly.
-PAPER = (250, 238, 219)
-WALL_TOP = (247, 232, 212)
-WALL_BOT = (232, 208, 180)
-FLOOR = (226, 199, 166)
-FLOOR_DARK = (204, 172, 137)
-FLOOR_LINE = (214, 187, 153)
+# The room palette. The first pass was a single warm ramp - tan wall, tan
+# floor, brick sofa, terracotta pot - which is the palette of a 1970s
+# children's book, and on a grey dog it also left the character sharing a hue
+# with everything behind it. This one is the scheme a room gets photographed
+# in now: warm off-white walls over a sage dado, pale oak boards, muted sage
+# upholstery, and terracotta and ochre kept back as accents so they read as
+# accents. It also separates the animal from its background, which the old
+# one did not.
+PAPER = (247, 243, 236)
+WALL_TOP = (244, 240, 233)
+WALL_BOT = (232, 227, 218)
+DADO = (208, 218, 206)          # painted lower wall, the one green plane
+DADO_DARK = (186, 200, 187)
+RAIL = (250, 248, 243)          # dado rail and skirting, near-white trim
+FLOOR = (233, 215, 190)
+FLOOR_DARK = (205, 183, 154)
+FLOOR_LINE = (220, 200, 172)
+RUG = (172, 198, 192)
+RUG_DARK = (144, 174, 168)
+RUG_LINE = (240, 236, 227)
 FUR_LIT = (228, 172, 116)
 FUR = (208, 148, 92)
 FUR_SHADE = (176, 116, 68)
 FUR_BELLY = (240, 204, 160)
-INK = (54, 38, 30)
-ACCENT = (222, 96, 68)
-LEAF = (132, 172, 120)
-LEAF_DARK = (96, 136, 90)
-SKY_TOP = (176, 214, 232)
-SKY_BOT = (226, 242, 242)
-SOFA = (198, 120, 102)
-SOFA_DARK = (166, 92, 78)
-FRAME = (176, 132, 104)
-POT = (188, 118, 88)
-CARD = (214, 172, 120)
-CARD_DARK = (184, 140, 92)
-GLASS_TOP = (222, 236, 242)
-GLASS_BOT = (196, 216, 228)
-NIGHT_TOP = (48, 54, 90)
-NIGHT_BOT = (82, 84, 120)
-NIGHT_FLOOR = (68, 66, 92)
-LAMP = (250, 218, 150)
-TONGUE = (222, 122, 130)
+INK = (50, 44, 42)
+ACCENT = (214, 106, 78)         # terracotta: collar, cushion, the vet cross
+OCHRE = (226, 166, 96)
+LEAF = (128, 168, 126)
+LEAF_DARK = (86, 128, 98)
+SKY_TOP = (166, 208, 228)
+SKY_BOT = (228, 242, 240)
+SOFA = (150, 174, 162)
+SOFA_DARK = (120, 146, 135)
+FRAME = (62, 58, 56)            # thin charcoal, not the old wide wood
+MAT = (250, 247, 241)
+POT = (234, 228, 216)           # speckled ceramic
+POT_DARK = (208, 200, 186)
+CARD = (218, 188, 146)
+CARD_DARK = (190, 156, 114)
+GLASS_TOP = (220, 238, 246)
+GLASS_BOT = (194, 222, 234)
+NIGHT_TOP = (42, 50, 78)
+NIGHT_BOT = (74, 82, 112)
+NIGHT_FLOOR = (62, 64, 90)
+LAMP = (252, 224, 158)
+BARK = (146, 118, 96)           # trees had been painted in a coat colour
+TONGUE = (226, 128, 134)
 MOUTH = (74, 40, 42)
 
 
@@ -112,15 +129,24 @@ def ink(s: float, mult: float = 1.0) -> float:
 # them at call time and nothing captures them in a default argument, so one
 # table recolours the whole character without touching the 39 draw sites.
 TAN_COAT = ((228, 172, 116), (208, 148, 92), (176, 116, 68), (240, 204, 160))
-GREY_COAT = ((198, 192, 184), (170, 164, 156), (138, 132, 126), (226, 221, 213))
+# Warmed from the first pass. A sable coat photographs as grey but it is not
+# neutral grey: every value has more red in it than blue, and mixed flat the
+# animal came out the colour of the concrete it was standing on.
+GREY_COAT = ((206, 199, 188), (178, 171, 160), (144, 137, 128), (238, 234, 226))
 COATS = {"dog": TAN_COAT, "cat": TAN_COAT, "greydog": GREY_COAT}
 
-# Ears, crown, saddle and tail, and the white of the muzzle and chest.
-# Sampled off the reference footage and lifted: the originals sit around
-# (120, 116, 110) and read as mud once compressed to a phone feed.
+# The markings, sampled off the reference photograph and lifted: the originals
+# sit around (120, 116, 110) and read as mud once compressed to a phone feed.
+# Ears, crown, the bridge of the muzzle, saddle and tail are the dark; the
+# muzzle, chin and chest are the white; and the tan is the part that was
+# missing - the eyebrow spots and the ring of lighter fur around each eye,
+# which is what lets a dark eye sit on a dark mask and still read.
 MARK_DARK = (74, 70, 68)
 MARK_SOFT = (104, 99, 95)
 MARK_WHITE = (245, 242, 236)
+MARK_TAN = (190, 158, 112)
+MARK_CREAM = (232, 225, 210)
+IRIS = (104, 72, 46)
 
 CHARACTERS = ("dog", "cat", "greydog")
 SPECIES = "dog"
@@ -242,17 +268,17 @@ def _skull_path(hx: float, hy: float, s: float) -> skia.Path:
         # the tan dog's, which came out longer and more pointed than the
         # reference animal's. Not the cat's flat face either - it still has a
         # muzzle, it is just a stubbier one.
-        p.moveTo(hx - 62 * s, hy - 14 * s)
-        p.cubicTo(hx - 62 * s, hy - 66 * s, hx + 14 * s, hy - 78 * s,
-                  hx + 50 * s, hy - 50 * s)          # broad crown
-        p.cubicTo(hx + 76 * s, hy - 28 * s, hx + 80 * s, hy + 6 * s,
-                  hx + 94 * s, hy + 10 * s)          # into the muzzle
-        p.cubicTo(hx + 106 * s, hy + 14 * s, hx + 106 * s, hy + 42 * s,
-                  hx + 86 * s, hy + 46 * s)          # blunt front
-        p.cubicTo(hx + 56 * s, hy + 52 * s, hx + 48 * s, hy + 60 * s,
-                  hx + 8 * s, hy + 60 * s)           # jaw
-        p.cubicTo(hx - 36 * s, hy + 60 * s, hx - 62 * s, hy + 26 * s,
-                  hx - 62 * s, hy - 14 * s)
+        p.moveTo(hx - 64 * s, hy - 14 * s)
+        p.cubicTo(hx - 64 * s, hy - 70 * s, hx + 14 * s, hy - 80 * s,
+                  hx + 52 * s, hy - 50 * s)          # broad crown
+        p.cubicTo(hx + 72 * s, hy - 30 * s, hx + 74 * s, hy + 6 * s,
+                  hx + 86 * s, hy + 12 * s)          # into the muzzle
+        p.cubicTo(hx + 96 * s, hy + 17 * s, hx + 96 * s, hy + 42 * s,
+                  hx + 78 * s, hy + 47 * s)          # blunt front
+        p.cubicTo(hx + 52 * s, hy + 53 * s, hx + 46 * s, hy + 62 * s,
+                  hx + 6 * s, hy + 62 * s)           # jaw
+        p.cubicTo(hx - 38 * s, hy + 62 * s, hx - 64 * s, hy + 26 * s,
+                  hx - 64 * s, hy - 14 * s)
         p.close()
         return p
     if is_cat():
@@ -342,7 +368,7 @@ def _second_ear(canvas, hx: float, hy: float, s: float, lift: float) -> None:
         p.close()
         canvas.drawPath(p, fill(MARK_DARK))
         canvas.drawPath(p, stroke(INK, ink(s)))
-        canvas.drawPath(_ear_inner(hx, hy, s, lift, far=True), fill(MARK_SOFT))
+        canvas.drawPath(_ear_inner(hx, hy, s, lift, far=True), fill(MARK_TAN))
         return
     top = hy - 108 * s - lift * s * 0.4
     p = skia.Path()
@@ -357,8 +383,60 @@ def _second_ear(canvas, hx: float, hy: float, s: float, lift: float) -> None:
     canvas.drawPath(_ear_inner(hx, hy, s, lift, far=True), fill(BLUSH, 190))
 
 
+def _mask(canvas, hx: float, hy: float, s: float, skull: skia.Path) -> None:
+    """The dark crown and nose bridge, the tan eye patch, the cream cheek.
+
+    The first pass of this dog wore only a faint cap on its crown, on the
+    grounds that a dark eye on a dark mask stops reading. The photograph
+    solves that itself: the mask runs right down the bridge of the muzzle,
+    and each eye sits in a ring of tan fur with a spot of the same tan over
+    it. Those two marks are the animal's face - without them it is a grey
+    dog, with them it is this grey dog - and they are what keeps the eye
+    legible against the dark.
+
+    Every mark is soft-edged and clipped to the skull. Sharp-edged they are
+    stickers on a head; fur does not change colour along a line, and the
+    blur is the whole difference between a marking and a paint job.
+    """
+    canvas.save()
+    canvas.clipPath(skull, doAntiAlias=True)
+
+    dark = skia.Path()
+    dark.moveTo(hx - 72 * s, hy - 6 * s)
+    dark.cubicTo(hx - 46 * s, hy - 26 * s, hx - 6 * s, hy - 28 * s,
+                 hx + 30 * s, hy - 22 * s)          # crown, down to the brow
+    dark.cubicTo(hx + 46 * s, hy - 14 * s, hx + 54 * s, hy - 2 * s,
+                 hx + 68 * s, hy + 10 * s)          # down the bridge
+    dark.cubicTo(hx + 80 * s, hy + 20 * s, hx + 86 * s, hy + 30 * s,
+                 hx + 106 * s, hy + 40 * s)         # onto the nose
+    dark.lineTo(hx + 130 * s, hy - 150 * s)
+    dark.lineTo(hx - 90 * s, hy - 150 * s)
+    dark.close()
+    mp = fill(MARK_DARK, 245)
+    mp.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 2.6 * s))
+    canvas.drawPath(dark, mp)
+
+    # cheek and jaw: the cream that carries on down into the chest
+    ck = fill(MARK_CREAM)
+    ck.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 7 * s))
+    canvas.drawOval(skia.Rect.MakeLTRB(hx - 40 * s, hy + 12 * s,
+                                       hx + 46 * s, hy + 68 * s), ck)
+
+    # the tan ring the eye sits in, and the spot above it
+    tan = fill(MARK_TAN)
+    tan.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 4 * s))
+    canvas.drawOval(skia.Rect.MakeLTRB(hx + 12 * s, hy - 30 * s,
+                                       hx + 56 * s, hy + 20 * s), tan)
+    spot = fill((214, 184, 134))
+    spot.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 2.5 * s))
+    canvas.drawOval(skia.Rect.MakeLTRB(hx + 14 * s, hy - 62 * s,
+                                       hx + 50 * s, hy - 44 * s), spot)
+    canvas.restore()
+
+
 def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
-         asleep: bool = False, blink: float = 0.0, mouth: float = 0.0) -> None:
+         asleep: bool = False, blink: float = 0.0, mouth: float = 0.0,
+         pant: float = 0.0) -> None:
     lw = ink(s)
     ip = stroke(INK, lw)
 
@@ -376,28 +454,12 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
     canvas.drawPath(ear, ip)
     if prick_ears():
         canvas.drawPath(_ear_inner(hx, hy, s, lift, far=False),
-                        fill(MARK_SOFT if is_greydog() else BLUSH,
+                        fill(MARK_TAN if is_greydog() else BLUSH,
                              255 if is_greydog() else 190))
 
     skull = _skull_path(hx, hy, s)
     canvas.drawPath(skull, grad((hx, hy - 70 * s), (hx, hy + 60 * s),
                                 FUR_LIT, FUR))
-    if is_greydog():
-        # A dark crown, clipped to the skull so it cannot spill past the
-        # outline. It stops above the brow: carried down over the eye, as the
-        # real dog's mask does, a dark eye on a dark mask stops reading.
-        canvas.save()
-        canvas.clipPath(skull, doAntiAlias=True)
-        cap = skia.Path()
-        cap.moveTo(hx - 70 * s, hy - 44 * s)
-        cap.cubicTo(hx - 40 * s, hy - 28 * s, hx + 20 * s, hy - 36 * s,
-                    hx + 62 * s, hy - 56 * s)
-        cap.lineTo(hx + 80 * s, hy - 100 * s)
-        cap.lineTo(hx - 70 * s, hy - 100 * s)
-        cap.close()
-        canvas.drawPath(cap, fill(MARK_SOFT, 200))
-        canvas.restore()
-    canvas.drawPath(skull, ip)
 
     # muzzle, lighter, tucked under the skull curve
     if is_cat():
@@ -408,14 +470,28 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
                                            cx + 22 * s, hy + 42 * s),
                         fill(FUR_BELLY))
     muzzle = skia.Path()
-    muzzle.moveTo(hx + 36 * s, hy + 8 * s)
-    muzzle.cubicTo(hx + 62 * s, hy - 2 * s, hx + 90 * s, hy + 4 * s,
-                   hx + 92 * s, hy + 26 * s)
-    muzzle.cubicTo(hx + 94 * s, hy + 48 * s, hx + 58 * s, hy + 52 * s,
-                   hx + 38 * s, hy + 42 * s)
+    if is_greydog():
+        muzzle.moveTo(hx + 28 * s, hy + 20 * s)
+        muzzle.cubicTo(hx + 52 * s, hy + 12 * s, hx + 78 * s, hy + 18 * s,
+                       hx + 82 * s, hy + 34 * s)
+        muzzle.cubicTo(hx + 84 * s, hy + 52 * s, hx + 52 * s, hy + 56 * s,
+                       hx + 30 * s, hy + 48 * s)
+    else:
+        muzzle.moveTo(hx + 36 * s, hy + 8 * s)
+        muzzle.cubicTo(hx + 62 * s, hy - 2 * s, hx + 90 * s, hy + 4 * s,
+                       hx + 92 * s, hy + 26 * s)
+        muzzle.cubicTo(hx + 94 * s, hy + 48 * s, hx + 58 * s, hy + 52 * s,
+                       hx + 38 * s, hy + 42 * s)
     muzzle.close()
-    if not is_cat():
-        canvas.drawPath(muzzle, fill(MARK_WHITE if is_greydog() else FUR_BELLY))
+    if is_greydog():
+        mz = fill(MARK_WHITE)
+        mz.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 4 * s))
+        canvas.drawPath(muzzle, mz)
+    elif not is_cat():
+        canvas.drawPath(muzzle, fill(FUR_BELLY))
+    if is_greydog():
+        _mask(canvas, hx, hy, s, skull)
+    canvas.drawPath(skull, ip)
 
     # cheek blush, the cheapest cuteness cue there is
     bl = fill(BLUSH, 95)
@@ -446,10 +522,13 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
             t = skia.Path()
             t.addOval(skia.Rect.MakeLTRB(cx - 13 * s, hy + 27 * s + gap * 0.40,
                                          cx + 13 * s, hy + 31 * s + gap * 1.0))
+            canvas.save()
+            canvas.clipPath(m, doAntiAlias=True)
             canvas.drawPath(t, fill(TONGUE))
+            canvas.restore()
         else:
             gap = 56 * s * mouth
-            x0, x1 = 44, 104
+            x0, x1 = (38, 92) if is_greydog() else (44, 104)
             m = skia.Path()
             m.moveTo(hx + x0 * s, hy + 28 * s)
             m.cubicTo(hx + (x0 + x1) / 2 * s, hy + 24 * s, hx + x1 * s, hy + 26 * s,
@@ -460,10 +539,42 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
             m.close()
             canvas.drawPath(m, fill(MOUTH))
             canvas.drawPath(m, stroke(INK, ink(s, 0.7)))
+            # Clipped to the mouth. Drawn free the tongue is an oval hanging
+            # off the jaw with no lip around it, which is a tongue somebody
+            # dropped rather than one inside a head.
             t = skia.Path()
             t.addOval(skia.Rect.MakeLTRB(hx + (x0 + 14) * s, hy + 28 * s + gap * 0.35,
                                          hx + (x1 - 8) * s, hy + 28 * s + gap * 0.95))
+            canvas.save()
+            canvas.clipPath(m, doAntiAlias=True)
             canvas.drawPath(t, fill(TONGUE))
+            canvas.restore()
+
+    if pant > 0.02 and not is_cat() and mouth <= 0.02:
+        # The reference dog is almost never photographed with its mouth shut,
+        # and a tongue over the lower lip is the whole difference between a
+        # dog standing there and a dog enjoying standing there. Drawn as a
+        # hang rather than an open jaw: the jaw only opens to bark.
+        tw = 13 * s
+        tx, ty = hx + 54 * s, hy + 44 * s
+        drop = (26 + 8 * pant) * s
+        lip = skia.Path()
+        lip.moveTo(hx + 36 * s, hy + 40 * s)
+        lip.quadTo(hx + 58 * s, hy + 48 * s, hx + 78 * s, hy + 38 * s)
+        canvas.drawPath(lip, stroke(INK, ink(s, 0.62)))
+        tongue = skia.Path()
+        tongue.moveTo(tx - tw, ty - 4 * s)
+        tongue.cubicTo(tx - tw - 5 * s, ty + drop * 0.72,
+                       tx - tw * 0.4, ty + drop, tx + tw * 0.2, ty + drop)
+        tongue.cubicTo(tx + tw * 0.9, ty + drop, tx + tw + 6 * s,
+                       ty + drop * 0.6, tx + tw, ty - 6 * s)
+        tongue.close()
+        canvas.drawPath(tongue, fill(TONGUE))
+        canvas.drawPath(tongue, stroke(INK, ink(s, 0.6)))
+        crease = skia.Path()
+        crease.moveTo(tx - 1 * s, ty + 4 * s)
+        crease.lineTo(tx - 1 * s, ty + drop * 0.62)
+        canvas.drawPath(crease, stroke((198, 98, 108), ink(s, 0.4)))
 
     # nose
     if is_cat():
@@ -509,18 +620,18 @@ def head(canvas, hx: float, hy: float, s: float, lift: float = 0.0,
                                        ny + ddy * s + 2.2 * s),
                     fill(INK, 150))
     else:
-        n0 = 68 if is_greydog() else 76
+        n0 = 60 if is_greydog() else 76
         canvas.drawOval(skia.Rect.MakeLTRB(hx + n0 * s, hy + 12 * s,
                                            hx + (n0 + 32) * s, hy + 40 * s),
                         fill(INK))
-        canvas.drawOval(skia.Rect.MakeLTRB(hx + (n0 + 7) * s, hy + 17 * s,
-                                           hx + (n0 + 17) * s, hy + 25 * s),
-                        fill((152, 134, 126)))
+        canvas.drawOval(skia.Rect.MakeLTRB(hx + (n0 + 8) * s, hy + 17 * s,
+                                           hx + (n0 + 15) * s, hy + 23 * s),
+                        fill((150, 142, 140), 210))
 
     # brow and eye. A cat's face is 34 units shorter, so the eye would
     # otherwise sit on the edge of it: everything here shifts back by `ex`.
     ex = hx - 16 * s if is_cat() else hx
-    if not is_cat():
+    if not (is_cat() or is_greydog()):
         brow = skia.Path()
         brow.moveTo(ex + 6 * s, hy - 40 * s)
         brow.quadTo(ex + 26 * s, hy - 50 * s, ex + 44 * s, hy - 38 * s)
@@ -561,13 +672,24 @@ def _eye_closed(canvas, cx: float, cy: float, rw: float, s: float,
 
 def _eye(canvas, cx: float, cy: float, rw: float, rh: float,
          s: float, alpha: int = 255) -> None:
-    """One eye: dark iris, a big catchlight high on it, a small one low.
+    """One eye: a warm iris around a black pupil, lit twice.
 
     Two lights rather than one is most of what stops a flat disc reading as
     a dead button - the upper one is the light source, the lower a bounce.
+    A single flat disc was still a button with lights on it, though. Real
+    eyes are two tones, and putting an amber iris inside the pupil costs one
+    more oval and is the difference between an eye and a bead - it is also
+    what the reference dog's eyes actually are, warm brown right up to a
+    dark rim.
     """
     canvas.drawOval(skia.Rect.MakeLTRB(cx - rw, cy - rh, cx + rw, cy + rh),
                     fill(INK, alpha))
+    canvas.drawOval(skia.Rect.MakeLTRB(cx - rw * 0.86, cy - rh * 0.86,
+                                       cx + rw * 0.86, cy + rh * 0.86),
+                    fill(IRIS, alpha))
+    canvas.drawOval(skia.Rect.MakeLTRB(cx - rw * 0.46, cy - rh * 0.50,
+                                       cx + rw * 0.46, cy + rh * 0.50),
+                    fill((28, 22, 20), alpha))
     canvas.drawOval(skia.Rect.MakeLTRB(cx + rw * 0.10, cy - rh * 0.72,
                                        cx + rw * 0.78, cy - rh * 0.10),
                     fill((255, 255, 255), alpha))
@@ -587,13 +709,72 @@ def collar(canvas, x: float, y: float, s: float) -> None:
                                        y + 30 * s), stroke(INK, ink(s, 0.6)))
 
 
+def taper(canvas, pts: list[tuple[float, float]], w0: float, w1: float,
+          rgb: tuple[int, int, int], lw: float) -> skia.Path:
+    """A limb drawn as a shape that narrows, not a stroke of even width.
+
+    Borrowed from the procedural-character work on GitHub, where tapered
+    limbs are the one thing separating a drawn body from a pipe-cleaner
+    one: a real leg is thick at the haunch and thin at the ankle, and a
+    constant-width stroke cannot say that at any width. The path is sampled
+    along a quadratic and offset by the local normal, so one outline covers
+    both edges and the ink line follows the taper too.
+    """
+    (ax, ay), (bx, by), (cx, cy) = pts
+    steps = 14
+    left: list[tuple[float, float]] = []
+    right: list[tuple[float, float]] = []
+    for i in range(steps + 1):
+        t = i / steps
+        mt = 1 - t
+        px = mt * mt * ax + 2 * mt * t * bx + t * t * cx
+        py = mt * mt * ay + 2 * mt * t * by + t * t * cy
+        dx = 2 * mt * (bx - ax) + 2 * t * (cx - bx)
+        dy = 2 * mt * (by - ay) + 2 * t * (cy - by)
+        n = math.hypot(dx, dy) or 1.0
+        hw = (w0 + (w1 - w0) * t) / 2
+        left.append((px - dy / n * hw, py + dx / n * hw))
+        right.append((px + dy / n * hw, py - dx / n * hw))
+    path = skia.Path()
+    path.moveTo(*left[0])
+    for pt in left[1:]:
+        path.lineTo(*pt)
+    for pt in reversed(right):
+        path.lineTo(*pt)
+    path.close()
+    canvas.drawPath(path, fill(rgb))
+    canvas.drawPath(path, stroke(INK, lw))
+    return path
+
+
+def inner_edge(canvas, path: skia.Path, dx: float, dy: float,
+               rgb: tuple[int, int, int], alpha: int, width: float,
+               sigma: float) -> None:
+    """A light or dark band just inside an outline.
+
+    Cel shading gets its depth from two marks: a rim along the lit edge and
+    an occlusion band along the shaded one. Both are the same trick here -
+    clip to the shape, then stroke the same shape shifted a little, so only
+    the part of the stroke that falls inside the silhouette survives.
+    """
+    paint = skia.Paint(AntiAlias=True, Color=col(rgb, alpha),
+                       Style=skia.Paint.kStroke_Style, StrokeWidth=width,
+                       StrokeJoin=skia.Paint.kRound_Join,
+                       StrokeCap=skia.Paint.kRound_Cap)
+    paint.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, sigma))
+    canvas.save()
+    canvas.clipPath(path, doAntiAlias=True)
+    canvas.translate(dx, dy)
+    canvas.drawPath(path, paint)
+    canvas.restore()
+
+
 def leg(canvas, hx: float, hy: float, swing: float, s: float,
         shade: tuple[int, int, int]) -> None:
-    p = skia.Path()
-    p.moveTo(hx, hy)
-    p.quadTo(hx + swing * 0.5, hy + 46 * s * LEG, hx + swing, hy + 86 * s * LEG)
-    canvas.drawPath(p, stroke(INK, ink(s, 4.7)))
-    canvas.drawPath(p, stroke(shade, ink(s, 3.4)))
+    knee = (hx + swing * 0.5, hy + 46 * s * LEG)
+    paw = (hx + swing, hy + 86 * s * LEG)
+    limb = taper(canvas, [(hx, hy), knee, paw], 38 * s, 25 * s, shade, ink(s))
+    inner_edge(canvas, limb, -3.5 * s, -2 * s, FUR_LIT, 120, 7 * s, 4 * s)
     py0, py1 = hy + 70 * s * LEG, hy + 100 * s * LEG
     for paint in (fill(shade), stroke(INK, ink(s, 0.75))):
         canvas.drawOval(skia.Rect.MakeLTRB(hx + swing - 20 * s, py0,
@@ -649,13 +830,20 @@ def _saddle(canvas, body: skia.Path, x: float, y: float, s: float,
     canvas.save()
     canvas.clipPath(body, doAntiAlias=True)
     band = skia.Path()
-    band.moveTo(x - 110 * s, y - 60 * s)
-    band.cubicTo(x - 60 * s, y - 42 * s, x + 30 * s, y - 52 * s,
-                 x + 100 * s, y - 74 * s + lean)
+    band.moveTo(x - 110 * s, y - 48 * s)
+    band.cubicTo(x - 60 * s, y - 30 * s, x + 30 * s, y - 40 * s,
+                 x + 100 * s, y - 62 * s + lean)
     band.lineTo(x + 120 * s, y - 150 * s + lean)
     band.lineTo(x - 120 * s, y - 150 * s)
     band.close()
-    canvas.drawPath(band, fill(MARK_SOFT, 170))
+    sp = grad((x, y - 110 * s), (x, y - 30 * s), MARK_DARK, MARK_SOFT)
+    sp.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 9 * s))
+    canvas.drawPath(band, sp)
+    # the cream bib, up the chest and under the jaw
+    bib = fill(MARK_CREAM)
+    bib.setMaskFilter(skia.MaskFilter.MakeBlur(skia.kNormal_BlurStyle, 12 * s))
+    canvas.drawOval(skia.Rect.MakeLTRB(x + 44 * s, y - 56 * s + lean,
+                                       x + 108 * s, y + 16 * s + lean), bib)
     canvas.restore()
 
 
@@ -665,6 +853,12 @@ def _draw_body(canvas, x: float, y: float, s: float, lean: float = 0.0) -> None:
                                FUR_LIT, FUR_SHADE))
     _saddle(canvas, body, x, y, s, lean)
     canvas.drawPath(_belly_path(x, y, s, lean), fill(FUR_BELLY))
+    # A lit edge along the back and a shaded one under the belly. Flat fills
+    # with one gradient read as paper cut-outs; these two bands are what
+    # give the shape a top and an underside.
+    inner_edge(canvas, body, -4 * s, -7 * s, (255, 250, 240), 95, 13 * s, 7 * s)
+    inner_edge(canvas, body, 3 * s, 9 * s, MARK_DARK if is_greydog()
+               else FUR_SHADE, 70, 15 * s, 9 * s)
     canvas.drawPath(body, stroke(INK, ink(s)))
 
 
@@ -694,7 +888,8 @@ def dog_standing(canvas, x: float, y: float, t: float, s: float = 1.0,
     leg(canvas, x + 80 * s, y - 6 * s, 0, s, FUR)
     collar(canvas, x + 70 * s, y - 34 * s, s * 1.1)
     head(canvas, x + 108 * s, y - 118 * s, s * HEAD, lift=bob * 2,
-         blink=(math.sin(t * 1.15) + 1) / 2)
+         blink=(math.sin(t * 1.15) + 1) / 2,
+         pant=0.5 + 0.5 * math.sin(t * 5.2) if is_greydog() else 0.0)
     canvas.restore()
 
 
@@ -857,7 +1052,9 @@ def dog_closeup(canvas, x: float, y: float, t: float, s: float = 1.0,
                 asleep: bool = False) -> None:
     tilt = math.sin(t * 1.4) * 8 * s
     head(canvas, x, y + tilt, s, lift=math.sin(t * 2.2) * 6, asleep=asleep,
-         blink=(math.sin(t * 1.5) + 1) / 2)
+         blink=(math.sin(t * 1.5) + 1) / 2,
+         pant=0.0 if asleep or not is_greydog()
+         else 0.5 + 0.5 * math.sin(t * 5.2))
 
 
 # --- backgrounds and props --------------------------------------------------
@@ -867,7 +1064,7 @@ def _u(w: int) -> float:
 
 
 def room(canvas, w: int, h: int, night: bool = False) -> None:
-    """Wall gradient, floor, boards. One draw call each, no cached bitmap.
+    """Wall, dado, skirting, floor. One draw call each, no cached bitmap.
 
     Drawn with an overscan margin. The close-ups push the camera in around a
     focal point near the floor, which maps the room's own bottom edge to
@@ -875,42 +1072,110 @@ def room(canvas, w: int, h: int, night: bool = False) -> None:
     15% of the picture, for as long as the shot ran. The canvas clips
     anything off-frame, so no other scene is affected, and the gradients stay
     anchored to the real frame so the colours inside it do not shift.
+
+    The wall is two planes rather than one. A single flat wall behind a flat
+    floor is the thing that makes a drawn room read as a backdrop; a painted
+    lower wall with a rail on it puts a horizontal line at the character's
+    shoulder and gives the room a near and a far surface.
     """
     u = _u(w)
     floor_y = h * 0.70
+    dado_y = floor_y - h * 0.205
     over = h * 0.6
-    canvas.drawRect(skia.Rect.MakeLTRB(-over, -over, w + over, floor_y),
-                    grad((0, 0), (0, floor_y),
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, -over, w + over, dado_y),
+                    grad((0, 0), (0, dado_y),
                          NIGHT_TOP if night else WALL_TOP,
                          NIGHT_BOT if night else WALL_BOT))
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, dado_y, w + over, floor_y),
+                    grad((0, dado_y), (0, floor_y),
+                         (56, 64, 92) if night else DADO,
+                         (46, 54, 80) if night else DADO_DARK))
+    # rail and skirting: thin trim, the two lines that sell a painted wall
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, dado_y - 9 * u, w + over, dado_y),
+                    fill((78, 86, 116) if night else RAIL))
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y - 30 * u, w + over, floor_y),
+                    fill((72, 80, 110) if night else RAIL))
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y - 34 * u, w + over,
+                                       floor_y - 30 * u),
+                    fill((52, 58, 84) if night else (216, 210, 198)))
+
     canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y, w + over, h + over),
                     grad((0, floor_y), (0, h),
                          NIGHT_FLOOR if night else FLOOR,
-                         (60, 58, 82) if night else FLOOR_DARK))
-    canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y - 16 * u, w + over, floor_y),
-                    fill((54, 54, 76) if night else FLOOR_DARK))
-    line = fill((62, 62, 84) if night else FLOOR_LINE)
-    yy = floor_y + 90 * u
+                         (54, 56, 80) if night else FLOOR_DARK))
+    # Wide boards: fewer, softer lines than the old close-ruled ones, which
+    # at phone size moired into a grey band.
+    line = fill((60, 62, 86) if night else FLOOR_LINE)
+    yy = floor_y + 104 * u
     while yy < h + over:
-        canvas.drawRect(skia.Rect.MakeLTRB(-over, yy, w + over, yy + 5 * u), line)
-        yy += 130 * u
+        canvas.drawRect(skia.Rect.MakeLTRB(-over, yy, w + over, yy + 4 * u), line)
+        yy += 168 * u
+
+
+def rug(canvas, cx: float, floor_y: float, u: float, night: bool) -> None:
+    """A flatweave under the character.
+
+    The floor is one flat plane, so a standing animal has nothing to stand
+    on but a colour. A rug gives the pose a footprint, and it is the one
+    place a cool tone can sit directly behind a grey dog's legs.
+    """
+    body = (74, 92, 108) if night else RUG
+    edge = (58, 74, 90) if night else RUG_DARK
+    stripe = (92, 108, 124) if night else RUG_LINE
+    top, bot = floor_y + 120 * u, floor_y + 330 * u
+    half_t, half_b = 470 * u, 620 * u
+    p = skia.Path()
+    p.moveTo(cx - half_t, top)
+    p.lineTo(cx + half_t, top)
+    p.lineTo(cx + half_b, bot)
+    p.lineTo(cx - half_b, bot)
+    p.close()
+    canvas.drawPath(p, fill(body))
+    canvas.save()
+    canvas.clipPath(p, doAntiAlias=True)
+    for f in (0.24, 0.74):
+        y = top + (bot - top) * f
+        canvas.drawRect(skia.Rect.MakeLTRB(cx - half_b, y, cx + half_b,
+                                           y + 26 * u), fill(stripe, 180))
+    canvas.restore()
+    canvas.drawPath(p, stroke(edge, 6 * u))
 
 
 def park(canvas, w: int, h: int) -> None:
+    """Sky, sun, two ridges of hills, grass.
+
+    The old version put two flat dark ovals on the horizon and called them
+    trees. Layered ridges in separating tones read as distance, which is
+    what an outdoor shot is for.
+    """
     u = _u(w)
     horizon = h * 0.66
     canvas.drawRect(skia.Rect.MakeLTRB(0, 0, w, horizon),
                     grad((0, 0), (0, horizon), SKY_TOP, SKY_BOT))
-    canvas.drawOval(skia.Rect.MakeLTRB(w * 0.66, h * 0.07, w * 0.92, h * 0.21),
-                    fill((250, 232, 176)))
-    canvas.drawOval(skia.Rect.MakeLTRB(-w * 0.25, horizon - 210 * u,
-                                       w * 0.6, horizon + 60 * u), fill(LEAF_DARK))
-    canvas.drawOval(skia.Rect.MakeLTRB(w * 0.42, horizon - 150 * u,
-                                       w * 1.3, horizon + 60 * u), fill(LEAF_DARK))
+    sun = skia.Paint(AntiAlias=True, Style=skia.Paint.kFill_Style)
+    sun.setShader(skia.GradientShader.MakeRadial(
+        center=(w * 0.78, h * 0.15), radius=h * 0.20,
+        colors=[col((255, 246, 214), 220), col((255, 246, 214), 0)]))
+    canvas.drawCircle(w * 0.78, h * 0.15, h * 0.20, sun)
+    canvas.drawCircle(w * 0.78, h * 0.15, h * 0.058, fill((255, 244, 206)))
+    for fy, rad, tone in ((0.055, 0.30, (168, 196, 176)),
+                          (0.02, 0.24, (140, 176, 154))):
+        far = skia.Path()
+        far.moveTo(-w * 0.1, horizon + h * 0.02)
+        far.cubicTo(w * 0.18, horizon - h * rad, w * 0.46, horizon - h * rad * 0.5,
+                    w * 0.62, horizon - h * fy)
+        far.cubicTo(w * 0.82, horizon - h * rad * 0.8, w * 1.0, horizon - h * 0.04,
+                    w * 1.1, horizon + h * 0.02)
+        far.close()
+        canvas.drawPath(far, fill(tone))
     canvas.drawRect(skia.Rect.MakeLTRB(0, horizon, w, h),
                     grad((0, horizon), (0, h), LEAF, LEAF_DARK))
-    canvas.drawRect(skia.Rect.MakeLTRB(0, horizon, w, horizon + 18 * u),
+    canvas.drawRect(skia.Rect.MakeLTRB(0, horizon, w, horizon + 14 * u),
                     fill(LEAF_DARK))
+    for fx, r in ((0.08, 0.030), (0.30, 0.021), (0.70, 0.024), (0.94, 0.032)):
+        canvas.drawOval(skia.Rect.MakeLTRB(w * fx - h * r, horizon - h * r * 0.9,
+                                           w * fx + h * r, horizon + h * r * 0.35),
+                        fill(LEAF_DARK))
 
 
 def _rr(canvas, l, t, r, b, rad, paint):
@@ -919,103 +1184,279 @@ def _rr(canvas, l, t, r, b, rad, paint):
 
 
 def sofa(canvas, sx: float, floor_y: float, u: float, night: bool) -> None:
-    body = (128, 88, 104) if night else SOFA
-    dark = (106, 72, 88) if night else SOFA_DARK
+    """A low mid-century sofa: slim arms, splayed legs, two throw pillows.
+
+    The old one was a single fat rounded rectangle sitting on the floor,
+    which is a sofa the way a loaf is a sofa. Lifting it on legs lets the
+    floor run underneath, and that gap is most of what dates or undates a
+    drawn interior.
+    """
+    body = (102, 116, 150) if night else SOFA
+    dark = (82, 94, 126) if night else SOFA_DARK
+    seat = (118, 132, 166) if night else (176, 196, 184)
     lw = 6 * u
-    sy = floor_y - 260 * u
-    for ax in (sx - 18 * u, sx + 458 * u):
-        _rr(canvas, ax, sy + 128 * u, ax + 80 * u, floor_y + 20 * u, 28 * u,
-            fill(body))
-        _rr(canvas, ax, sy + 128 * u, ax + 80 * u, floor_y + 20 * u, 28 * u,
+    sy = floor_y - 300 * u
+    lift = floor_y - 46 * u          # underside of the frame
+    legc = (74, 78, 104) if night else (150, 116, 84)
+
+    for lx in (sx + 46 * u, sx + 474 * u):
+        legp = skia.Path()
+        legp.moveTo(lx - 14 * u, lift - 6 * u)
+        legp.lineTo(lx + 14 * u, lift - 6 * u)
+        legp.lineTo(lx + 24 * u, floor_y + 22 * u)
+        legp.lineTo(lx + 8 * u, floor_y + 22 * u)
+        legp.close()
+        canvas.drawPath(legp, fill(legc))
+        canvas.drawPath(legp, stroke(INK, lw))
+    # back, then arms, then the seat in front of both
+    _rr(canvas, sx + 24 * u, sy, sx + 496 * u, lift, 34 * u,
+        grad((sx, sy), (sx, lift), body, dark))
+    _rr(canvas, sx + 24 * u, sy, sx + 496 * u, lift, 34 * u, stroke(INK, lw))
+    for ax in (sx - 6 * u, sx + 466 * u):
+        _rr(canvas, ax, sy + 96 * u, ax + 62 * u, lift, 26 * u, fill(dark))
+        _rr(canvas, ax, sy + 96 * u, ax + 62 * u, lift, 26 * u, stroke(INK, lw))
+    _rr(canvas, sx + 8 * u, sy + 168 * u, sx + 512 * u, lift, 28 * u, fill(seat))
+    _rr(canvas, sx + 8 * u, sy + 168 * u, sx + 512 * u, lift, 28 * u,
+        stroke(INK, lw))
+    canvas.drawLine(sx + 260 * u, sy + 176 * u, sx + 260 * u, lift - 10 * u,
+                    stroke(INK, lw * 0.6))
+    for px, c in ((sx + 66 * u, OCHRE), (sx + 366 * u, ACCENT)):
+        tone = (96, 88, 124) if night else c
+        _rr(canvas, px, sy + 58 * u, px + 118 * u, sy + 176 * u, 22 * u,
+            fill(tone))
+        _rr(canvas, px, sy + 58 * u, px + 118 * u, sy + 176 * u, 22 * u,
             stroke(INK, lw))
-    _rr(canvas, sx, sy, sx + 520 * u, floor_y + 20 * u, 40 * u,
-        grad((sx, sy), (sx, floor_y), body, dark))
-    _rr(canvas, sx, sy, sx + 520 * u, floor_y + 20 * u, 40 * u, stroke(INK, lw))
-    _rr(canvas, sx + 28 * u, sy + 42 * u, sx + 492 * u, sy + 196 * u, 28 * u,
-        fill(dark))
 
 
 def window(canvas, wx: float, h: int, u: float, night: bool) -> None:
+    """An arched window with a sill and something growing outside.
+
+    A rectangle with a cross in it is a window from a child's drawing. The
+    arch is the shape every interior shot has in it now, and a hedge and a
+    sky behind the glass give the room an outside to sit in.
+    """
     lw = 6 * u
-    top, bot = h * 0.19, h * 0.43
-    _rr(canvas, wx, top, wx + 300 * u, bot, 20 * u,
-        grad((wx, top), (wx, bot),
-             (40, 46, 80) if night else GLASS_TOP,
-             (58, 62, 98) if night else GLASS_BOT))
-    _rr(canvas, wx, top, wx + 300 * u, bot, 20 * u, stroke(INK, lw))
-    canvas.drawRect(skia.Rect.MakeLTRB(wx + 147 * u, top, wx + 153 * u, bot),
-                    fill(INK))
+    top, bot = h * 0.155, h * 0.475
+    ww = 330 * u
+    arch = skia.Path()
+    arch.moveTo(wx, bot)
+    arch.lineTo(wx, top + ww * 0.5)
+    arch.arcTo(skia.Rect.MakeLTRB(wx, top, wx + ww, top + ww), 180, 180, False)
+    arch.lineTo(wx + ww, bot)
+    arch.close()
+    canvas.drawPath(arch, grad((wx, top), (wx, bot),
+                               (34, 42, 74) if night else GLASS_TOP,
+                               (52, 58, 92) if night else GLASS_BOT))
+    canvas.save()
+    canvas.clipPath(arch, doAntiAlias=True)
     if night:
-        canvas.drawOval(skia.Rect.MakeLTRB(wx + 196 * u, h * 0.225,
-                                           wx + 252 * u, h * 0.256), fill(LAMP))
+        canvas.drawCircle(wx + ww * 0.68, top + ww * 0.42, 34 * u, fill(LAMP))
+        for dx, dy, r in ((0.22, 0.30, 5), (0.38, 0.55, 4), (0.80, 0.72, 5)):
+            canvas.drawCircle(wx + ww * dx, top + ww * dy, r * u,
+                              fill((236, 240, 255), 200))
+    else:
+        canvas.drawCircle(wx + ww * 0.74, top + ww * 0.34, 46 * u,
+                          fill((255, 246, 214)))
+        for fx, r in ((0.10, 120), (0.42, 96), (0.78, 108)):
+            canvas.drawOval(skia.Rect.MakeLTRB(wx + ww * fx - r * u, bot - r * 1.5 * u,
+                                               wx + ww * fx + r * u, bot + r * u),
+                            fill(LEAF if fx == 0.42 else LEAF_DARK))
+    canvas.restore()
+    canvas.drawPath(arch, stroke(INK, lw))
+    canvas.drawLine(wx + ww / 2, top + ww * 0.08, wx + ww / 2, bot,
+                    stroke(INK, lw * 0.8))
+    canvas.drawLine(wx + 6 * u, top + ww * 0.62, wx + ww - 6 * u,
+                    top + ww * 0.62, stroke(INK, lw * 0.8))
+    _rr(canvas, wx - 26 * u, bot, wx + ww + 26 * u, bot + 26 * u, 8 * u,
+        fill((70, 78, 108) if night else RAIL))
+    _rr(canvas, wx - 26 * u, bot, wx + ww + 26 * u, bot + 26 * u, 8 * u,
+        stroke(INK, lw))
 
 
 def picture(canvas, x: float, y: float, u: float, night: bool) -> None:
-    frame = (88, 74, 100) if night else FRAME
-    inner = (116, 128, 146) if night else (240, 228, 208)
-    lw = 6 * u
-    _rr(canvas, x, y, x + 220 * u, y + 170 * u, 10 * u, fill(frame))
-    _rr(canvas, x, y, x + 220 * u, y + 170 * u, 10 * u, stroke(INK, lw))
-    _rr(canvas, x + 22 * u, y + 22 * u, x + 198 * u, y + 148 * u, 6 * u,
-        fill(inner))
-    canvas.drawOval(skia.Rect.MakeLTRB(x + 88 * u, y + 76 * u,
-                                       x + 134 * u, y + 122 * u), fill(frame))
-    for dx in (-30, 2, 34):
-        canvas.drawOval(skia.Rect.MakeLTRB(x + 92 * u + dx * u, y + 44 * u,
-                                           x + 118 * u + dx * u, y + 72 * u),
-                        fill(frame))
+    """A pair of prints, hung off one baseline: an arch and a horizon.
+
+    One frame with a dog's face in it was doing the job of a caption. Two
+    abstract prints in thin charcoal frames read as a wall somebody
+    decorated, and they do not compete with the animal for attention.
+    """
+    fr = (96, 102, 134) if night else FRAME
+    inner = (108, 118, 146) if night else MAT
+    lw = 5 * u
+    _rr(canvas, x, y, x + 200 * u, y + 268 * u, 6 * u, fill(inner))
+    _rr(canvas, x, y, x + 200 * u, y + 268 * u, 6 * u, stroke(fr, lw * 1.6))
+    canvas.drawCircle(x + 74 * u, y + 96 * u, 44 * u,
+                      fill((132, 142, 170) if night else OCHRE))
+    a = skia.Path()
+    a.moveTo(x + 40 * u, y + 216 * u)
+    a.lineTo(x + 40 * u, y + 148 * u)
+    a.arcTo(skia.Rect.MakeLTRB(x + 40 * u, y + 88 * u, x + 160 * u, y + 208 * u),
+            180, 180, False)
+    a.lineTo(x + 160 * u, y + 216 * u)
+    a.close()
+    canvas.drawPath(a, fill((122, 132, 160) if night else ACCENT, 225))
+    canvas.drawRect(skia.Rect.MakeLTRB(x + 30 * u, y + 216 * u, x + 170 * u,
+                                       y + 226 * u),
+                    fill((96, 104, 136) if night else (104, 92, 86)))
+
+    bx, by = x + 228 * u, y + 96 * u
+    _rr(canvas, bx, by, bx + 168 * u, by + 172 * u, 6 * u, fill(inner))
+    _rr(canvas, bx, by, bx + 168 * u, by + 172 * u, 6 * u, stroke(fr, lw * 1.6))
+    hill = skia.Path()
+    hill.moveTo(bx + 18 * u, by + 132 * u)
+    hill.quadTo(bx + 66 * u, by + 58 * u, bx + 104 * u, by + 132 * u)
+    hill.quadTo(bx + 130 * u, by + 92 * u, bx + 150 * u, by + 132 * u)
+    hill.lineTo(bx + 18 * u, by + 132 * u)
+    hill.close()
+    canvas.drawPath(hill, fill((118, 128, 156) if night else LEAF_DARK, 210))
+
+
+def _leaf(canvas, cx: float, cy: float, angle: float, length: float,
+          half: float, face: tuple[int, int, int], vein: tuple[int, int, int],
+          lw: float) -> None:
+    """One leaf blade, drawn along its own axis with a midrib.
+
+    The first pass cut monstera notches into the outline by sampling the
+    half-width and dropping it inside a notch band. At the size a house
+    plant occupies in frame those slits are three pixels wide and read as
+    noise on the edge, not as a split leaf, so the blade is smooth and the
+    veins carry the detail instead.
+    """
+    a = math.radians(angle)
+    ux, uy = math.sin(a), -math.cos(a)
+    nx, ny = -uy, ux
+    tipx, tipy = cx + ux * length, cy + uy * length
+    p = skia.Path()
+    p.moveTo(cx, cy)
+    for side in (1, -1):
+        p.cubicTo(cx + ux * length * 0.22 + nx * half * 1.05 * side,
+                  cy + uy * length * 0.22 + ny * half * 1.05 * side,
+                  cx + ux * length * 0.74 + nx * half * 0.92 * side,
+                  cy + uy * length * 0.74 + ny * half * 0.92 * side,
+                  tipx, tipy)
+        if side == 1:
+            p.moveTo(tipx, tipy)
+    p.close()
+    canvas.drawPath(p, fill(face))
+    # Veins are clipped to the blade. Drawn free they overshoot the outline
+    # wherever the leaf narrows faster than the vein fans, and a leaf with
+    # lines coming out of its edge reads as a web.
+    canvas.save()
+    canvas.clipPath(p, doAntiAlias=True)
+    rib = skia.Path()
+    rib.moveTo(cx, cy)
+    rib.lineTo(tipx, tipy)
+    canvas.drawPath(rib, stroke(vein, lw * 0.7))
+    for f in (0.34, 0.62):
+        bx, by = cx + ux * length * f, cy + uy * length * f
+        for side in (1, -1):
+            v = skia.Path()
+            v.moveTo(bx, by)
+            v.quadTo(bx + ux * length * 0.08 + nx * half * 0.45 * side,
+                     by + uy * length * 0.08 + ny * half * 0.45 * side,
+                     cx + ux * length * (f + 0.17) + nx * half * 0.62 * side,
+                     cy + uy * length * (f + 0.17) + ny * half * 0.62 * side)
+            canvas.drawPath(v, stroke(vein, lw * 0.42))
+    canvas.restore()
+    canvas.drawPath(p, stroke(INK, lw))
 
 
 def plant(canvas, x: float, floor_y: float, u: float, night: bool) -> None:
-    leafc = (70, 100, 78) if night else LEAF_DARK
-    leaf2 = (88, 120, 92) if night else LEAF
-    potc = (146, 92, 70) if night else POT
+    """A low, full house plant in a speckled pot on a stand.
+
+    Tall thin stems with one blade on the end read as a spider, and at the
+    right-hand edge of the frame half of it was outside the picture anyway.
+    Short stems and wide blades give the corner a mass instead of a fringe.
+    """
+    leafc = (64, 96, 82) if night else LEAF_DARK
+    leaf2 = (82, 116, 98) if night else LEAF
+    vein = (52, 80, 68) if night else (72, 110, 84)
+    potc = (130, 136, 164) if night else POT
+    potd = (108, 114, 142) if night else POT_DARK
     lw = 6 * u
-    pot = skia.Path()
-    pot.moveTo(x - 56 * u, floor_y - 8 * u)
-    pot.lineTo(x + 56 * u, floor_y - 8 * u)
-    pot.lineTo(x + 40 * u, floor_y + 100 * u)
-    pot.lineTo(x - 40 * u, floor_y + 100 * u)
-    pot.close()
-    canvas.drawPath(pot, fill(potc))
-    canvas.drawPath(pot, stroke(INK, lw))
-    for a, r in ((-48, 160), (0, 200), (46, 160)):
-        tx = x + math.sin(math.radians(a)) * r * u
-        ty = floor_y - 8 * u - math.cos(math.radians(a)) * r * u
+    rim = floor_y - 56 * u
+    for angle, length, half, near in ((-58, 176, 60, False), (-24, 206, 66, True),
+                                      (6, 194, 62, False), (38, 164, 56, True),
+                                      (66, 126, 48, False)):
+        sx = x + math.sin(math.radians(angle)) * 26 * u
         stem = skia.Path()
-        stem.moveTo(x, floor_y - 8 * u)
-        stem.quadTo((x + tx) / 2 + 14 * u, (floor_y + ty) / 2, tx, ty)
-        canvas.drawPath(stem, stroke(INK, 20 * u))
-        canvas.drawPath(stem, stroke(leafc, 13 * u))
-        canvas.drawOval(skia.Rect.MakeLTRB(tx - 38 * u, ty - 46 * u,
-                                           tx + 38 * u, ty + 26 * u), fill(leaf2))
-        canvas.drawOval(skia.Rect.MakeLTRB(tx - 38 * u, ty - 46 * u,
-                                           tx + 38 * u, ty + 26 * u),
-                        stroke(INK, lw))
+        stem.moveTo(x, rim)
+        stem.quadTo(sx, rim - length * 0.35 * u, 
+                    sx + math.sin(math.radians(angle)) * length * 0.30 * u,
+                    rim - math.cos(math.radians(angle)) * length * 0.30 * u)
+        canvas.drawPath(stem, stroke(INK, 13 * u))
+        canvas.drawPath(stem, stroke(leafc, 8 * u))
+        _leaf(canvas, sx + math.sin(math.radians(angle)) * length * 0.28 * u,
+              rim - math.cos(math.radians(angle)) * length * 0.28 * u,
+              angle, length * 0.78 * u, half * u,
+              leaf2 if near else leafc, vein, lw * 0.9)
+    pot = skia.Path()
+    pot.moveTo(x - 66 * u, rim)
+    pot.lineTo(x + 66 * u, rim)
+    pot.lineTo(x + 46 * u, rim + 112 * u)
+    pot.lineTo(x - 46 * u, rim + 112 * u)
+    pot.close()
+    canvas.drawPath(pot, grad((x, rim), (x, rim + 112 * u), potc, potd))
+    canvas.drawPath(pot, stroke(INK, lw))
+    canvas.save()
+    canvas.clipPath(pot, doAntiAlias=True)
+    for sx, sy in ((-30, 22), (-6, 60), (22, 16), (34, 56), (2, 88), (-38, 84)):
+        canvas.drawCircle(x + sx * u, rim + sy * u, 3.4 * u, fill(INK, 70))
+    canvas.restore()
+    for lx in (-1, 1):
+        lp = skia.Path()
+        lp.moveTo(x + lx * 40 * u, rim + 104 * u)
+        lp.lineTo(x + lx * 62 * u, floor_y + 92 * u)
+        canvas.drawPath(lp, stroke(INK, 13 * u))
+        canvas.drawPath(lp, stroke((74, 78, 104) if night else (150, 116, 84),
+                                   8 * u))
 
 
 def tree(canvas, tx: float, ty: float, horizon: float, r: float, u: float) -> None:
+    """Trunk and a canopy of three blobs.
+
+    The trunk used to be painted in FUR_SHADE, which is a coat colour: the
+    moment the grey dog rebound it, every tree in the park turned grey.
+    """
     trunk = skia.Path()
     trunk.moveTo(tx, ty)
     trunk.lineTo(tx, horizon + 10 * u)
-    canvas.drawPath(trunk, stroke(INK, 44 * u))
-    canvas.drawPath(trunk, stroke(FUR_SHADE, 32 * u))
-    canvas.drawOval(skia.Rect.MakeLTRB(tx - r, ty - r, tx + r, ty + r * 0.7),
-                    grad((tx, ty - r), (tx, ty + r * 0.7), LEAF, LEAF_DARK))
-    canvas.drawOval(skia.Rect.MakeLTRB(tx - r, ty - r, tx + r, ty + r * 0.7),
-                    stroke(INK, 6 * u))
+    canvas.drawPath(trunk, stroke(INK, 42 * u))
+    canvas.drawPath(trunk, stroke(BARK, 30 * u))
+    # Unioned, not just added to one path: three ovals in a single path each
+    # keep their own outline, so the canopy came out as a stroked Venn
+    # diagram instead of one crown.
+    canopy = skia.Path()
+    for dx, dy, rr in ((-0.52, 0.22, 0.70), (0.52, 0.18, 0.66), (0.0, -0.18, 1.0)):
+        blob = skia.Path()
+        blob.addOval(skia.Rect.MakeLTRB(tx + dx * r - r * rr,
+                                        ty + dy * r - r * rr,
+                                        tx + dx * r + r * rr,
+                                        ty + dy * r + r * rr * 0.82))
+        canopy = skia.Op(canopy, blob, skia.PathOp.kUnion_PathOp)
+    canvas.drawPath(canopy, grad((tx, ty - r), (tx, ty + r * 0.8), LEAF, LEAF_DARK))
+    canvas.drawPath(canopy, stroke(INK, 6 * u))
 
 
 def dog_bed(canvas, cx: float, cy: float, u: float, night: bool) -> None:
-    body = (116, 80, 108) if night else (168, 126, 158)
-    rim = (92, 62, 88) if night else (144, 104, 136)
+    """A bolster bed: charcoal shell, cream cushion.
+
+    It was pink, which was the one saturated thing in the room and pulled
+    the eye off the sleeping animal.
+    """
+    shell = (76, 82, 110) if night else (118, 126, 138)
+    pad = (96, 102, 132) if night else (238, 232, 220)
     canvas.drawOval(skia.Rect.MakeLTRB(cx - 380 * u, cy - 108 * u,
-                                       cx + 380 * u, cy + 108 * u), fill(body))
+                                       cx + 380 * u, cy + 108 * u), fill(shell))
     canvas.drawOval(skia.Rect.MakeLTRB(cx - 380 * u, cy - 108 * u,
                                        cx + 380 * u, cy + 108 * u),
                     stroke(INK, 6 * u))
-    canvas.drawOval(skia.Rect.MakeLTRB(cx - 320 * u, cy - 72 * u,
-                                       cx + 320 * u, cy + 88 * u), fill(rim))
+    canvas.drawOval(skia.Rect.MakeLTRB(cx - 318 * u, cy - 68 * u,
+                                       cx + 318 * u, cy + 92 * u), fill(pad))
+    for k in range(-2, 3):
+        canvas.drawLine(cx + k * 128 * u, cy - 58 * u, cx + k * 128 * u,
+                        cy + 76 * u, stroke((208, 200, 186) if not night
+                                            else (86, 92, 120), 4 * u))
 
 
 # --- scenes -----------------------------------------------------------------
@@ -1072,13 +1513,20 @@ def scene_box(canvas, w, h, t):
 
 
 def _room_static(canvas, w, h, night=False):
+    """The room every indoor scene shares.
+
+    Order is back to front: wall, then what hangs on it, then the floor rug,
+    then the furniture standing on it. The rug goes down before the sofa so
+    the sofa's legs sit on top of it.
+    """
     u = _u(w)
     room(canvas, w, h, night)
     floor_y = h * 0.70
-    picture(canvas, w * 0.10, h * 0.21, u, night)
-    window(canvas, w * 0.62, h, u, night)
-    plant(canvas, w * 0.92, floor_y, u, night)
-    sofa(canvas, w * 0.02, floor_y, u, night)
+    picture(canvas, w * 0.08, h * 0.155, u, night)
+    window(canvas, w * 0.60, h, u, night)
+    rug(canvas, w * 0.52, floor_y, u, night)
+    plant(canvas, w * 0.94, floor_y, u, night)
+    sofa(canvas, w * 0.01, floor_y, u, night)
 
 
 def _scroll(t, speed, span, offset=0.0):
@@ -1226,21 +1674,81 @@ def scene_sniff_park(canvas, w, h, t):
     dog_sniffing(canvas, w * 0.44, h * 0.80, t, s=1.8 * u, shade=LEAF_DARK)
 
 
-def scene_vet(canvas, w, h, t):
+def clinic(canvas, w: int, h: int) -> None:
+    """The consulting room: its own space, not the living room with a cross.
+
+    The vet shot used to be the living room - sofa, prints, house plant -
+    with a red cross floating over the wall art. A clinic is a cooler wall,
+    a cabinet and a scrubbed floor, and the scene reads as somewhere else
+    the moment those replace the furniture.
+    """
     u = _u(w)
-    _room_static(canvas, w, h)
     floor_y = h * 0.70
-    _rr(canvas, w * 0.04, floor_y + 20 * u, w * 0.96, floor_y + 210 * u, 28 * u,
-        fill((230, 236, 238)))
-    _rr(canvas, w * 0.04, floor_y + 20 * u, w * 0.96, floor_y + 210 * u, 28 * u,
+    over = h * 0.6
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, -over, w + over, floor_y),
+                    grad((0, 0), (0, floor_y), (240, 246, 244), (214, 228, 226)))
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y, w + over, h + over),
+                    grad((0, floor_y), (0, h), (226, 232, 234), (198, 208, 212)))
+    canvas.drawRect(skia.Rect.MakeLTRB(-over, floor_y - 26 * u, w + over, floor_y),
+                    fill(RAIL))
+    tile = fill((210, 220, 222))
+    yy = floor_y + 120 * u
+    while yy < h + over:
+        canvas.drawRect(skia.Rect.MakeLTRB(-over, yy, w + over, yy + 4 * u), tile)
+        yy += 190 * u
+
+    # cabinet: three drawers and a worktop, pushed to the left
+    cx0, cw = w * 0.02, 460 * u
+    top = floor_y - 300 * u
+    _rr(canvas, cx0, top, cx0 + cw, floor_y, 14 * u, fill((246, 248, 248)))
+    _rr(canvas, cx0, top, cx0 + cw, floor_y, 14 * u, stroke(INK, 6 * u))
+    _rr(canvas, cx0 - 12 * u, top - 22 * u, cx0 + cw + 12 * u, top, 8 * u,
+        fill((186, 200, 202)))
+    _rr(canvas, cx0 - 12 * u, top - 22 * u, cx0 + cw + 12 * u, top, 8 * u,
         stroke(INK, 6 * u))
-    cx, cy, arm = w * 0.40, h * 0.22, 96 * u
+    for k in range(3):
+        dy = top + 30 * u + k * 88 * u
+        _rr(canvas, cx0 + 24 * u, dy, cx0 + cw - 24 * u, dy + 68 * u, 10 * u,
+            stroke(INK, 5 * u))
+        canvas.drawLine(cx0 + cw * 0.40, dy + 34 * u, cx0 + cw * 0.60,
+                        dy + 34 * u, stroke(INK, 7 * u))
+    # a jar and a box on the worktop
+    _rr(canvas, cx0 + 64 * u, top - 96 * u, cx0 + 132 * u, top - 22 * u, 10 * u,
+        fill(LEAF))
+    _rr(canvas, cx0 + 64 * u, top - 96 * u, cx0 + 132 * u, top - 22 * u, 10 * u,
+        stroke(INK, 5 * u))
+    _rr(canvas, cx0 + 168 * u, top - 70 * u, cx0 + 256 * u, top - 22 * u, 8 * u,
+        fill(OCHRE))
+    _rr(canvas, cx0 + 168 * u, top - 70 * u, cx0 + 256 * u, top - 22 * u, 8 * u,
+        stroke(INK, 5 * u))
+
+    # the cross, on clear wall above the table
+    cx, cy, arm = w * 0.62, h * 0.20, 92 * u
     for l, tt, r, b in ((cx - arm / 3, cy - arm, cx + arm / 3, cy + arm),
                         (cx - arm, cy - arm / 3, cx + arm, cy + arm / 3)):
         _rr(canvas, l, tt, r, b, 14 * u, fill(ACCENT))
         _rr(canvas, l, tt, r, b, 14 * u, stroke(INK, 6 * u))
-    dog_standing(canvas, w * 0.44, floor_y - 68 * u, t, s=1.75 * u,
-                 shade=(200, 208, 212))
+
+
+def scene_vet(canvas, w, h, t):
+    u = _u(w)
+    clinic(canvas, w, h)
+    floor_y = h * 0.70
+    top = floor_y + 30 * u
+    # exam table: a padded top on a steel base, so the dog stands on
+    # something rather than hovering over a slab
+    for lx in (w * 0.30, w * 0.74):
+        canvas.drawLine(lx, top + 44 * u, lx, floor_y + 250 * u,
+                        stroke(INK, 22 * u))
+        canvas.drawLine(lx, top + 44 * u, lx, floor_y + 250 * u,
+                        stroke((188, 196, 200), 14 * u))
+    _rr(canvas, w * 0.14, top, w * 0.90, top + 52 * u, 18 * u,
+        fill((238, 242, 244)))
+    _rr(canvas, w * 0.14, top, w * 0.90, top + 52 * u, 18 * u, stroke(INK, 6 * u))
+    # Placed so the paws land on the tabletop rather than through it: the
+    # pose puts them about 119 design units below the point it is given.
+    dog_standing(canvas, w * 0.46, top - 112 * u, t, s=1.7 * u,
+                 shade=(196, 206, 210))
 
 
 def _mirror_scene(canvas, w, h, t, pose):
@@ -1305,6 +1813,46 @@ SCENES = {
 }
 
 
+_GRAIN: dict[tuple[int, int], Any] = {}
+
+
+def grain(canvas, w: int, h: int, strength: int = 15) -> None:
+    """A fixed film grain over the finished frame.
+
+    Flat vector fills across a 1080x1920 frame band: the wall gradient alone
+    covers a thousand rows in twenty steps of value, and h264 turns those
+    steps into visible stripes. A little noise dithers the gradient and
+    breaks the banding, and it is also what separates flat illustration that
+    looks printed from flat illustration that looks like a slide.
+
+    The pattern is generated once per frame size and reused, not reseeded
+    per frame. Grain that crawls is expensive to encode - the codec has to
+    spend bits on noise that changes every frame - and on a still drawing it
+    reads as dirt on the lens rather than tooth in the paper.
+    """
+    img = _GRAIN.get((w, h))
+    if img is None:
+        import numpy as np
+        # Generated at half size and doubled, so one grain is two pixels
+        # across: at 1:1 on a 1080-wide frame it is finer than the encoder
+        # can keep and comes out as mush. Doubled here rather than by
+        # drawing it scaled, so the per-frame cost is a straight blit.
+        gw, gh = max(1, w // 2), max(1, h // 2)
+        rng = np.random.default_rng(1729)
+        noise = rng.normal(128, 26, (gh, gw)).clip(0, 255).astype(np.uint8)
+        noise = np.repeat(np.repeat(noise, 2, axis=0), 2, axis=1)[:h, :w]
+        if noise.shape != (h, w):
+            noise = np.pad(noise, ((0, h - noise.shape[0]),
+                                   (0, w - noise.shape[1])), mode="edge")
+        rgba = np.dstack([noise, noise, noise,
+                          np.full((h, w), 255, dtype=np.uint8)])
+        img = skia.Image.fromarray(np.ascontiguousarray(rgba))
+        _GRAIN[(w, h)] = img
+    canvas.drawImage(img, 0, 0, skia.SamplingOptions(),
+                     skia.Paint(Alphaf=strength / 255.0,
+                                BlendMode=skia.BlendMode.kOverlay))
+
+
 def render_clip(query: str, seconds: float, cfg: dict[str, Any],
                 dest) -> Any:
     """Draw `seconds` of animation for `query` and encode it to `dest`.
@@ -1346,6 +1894,7 @@ def render_clip(query: str, seconds: float, cfg: dict[str, Any],
         camera(canvas, w, h, progress, index, cam_phase)
         scene(canvas, w, h, clock + i / fps)
         canvas.restore()
+        grain(canvas, w, h, int(cfg["video"].get("toon_grain", 15)))
         banner(canvas, w, h, text, progress)
         surface.makeImageSnapshot().save(str(frames / f"{i:04d}.png"), skia.kPNG)
 
@@ -1398,6 +1947,20 @@ def smooth(p: float) -> float:
 def there_and_back(p: float) -> float:
     """Out and back within one cycle, eased at both ends."""
     return smooth(2 * p) if p < 0.5 else smooth(2 * (1 - p))
+
+
+def spring(p: float, damping: float = 6.0, freq: float = 9.0) -> float:
+    """A damped spring: overshoots the target and settles back onto it.
+
+    The procedural-animation work this module has been borrowing from drives
+    hair and clothing off damped springs rather than off eased interpolation,
+    for the same reason a title card feels dead when it eases in and alive
+    when it overshoots by a few per cent. Analytic rather than integrated,
+    so it can be evaluated at any frame without carrying state between them.
+    """
+    if p >= 1.0:
+        return 1.0
+    return 1.0 - math.exp(-damping * p) * math.cos(freq * p)
 
 
 def lag(phase: float, amount: float) -> float:
@@ -1457,7 +2020,7 @@ def banner(canvas, w: int, h: int, text: str, progress: float) -> None:
     lines = _wrap(text.upper(), font, w * 0.82)
     line_h = size * 1.24
 
-    pop = ease_out(min(1.0, progress / 0.12)) if progress < 0.12 else 1.0
+    pop = spring(min(1.0, progress / 0.16)) if progress < 0.16 else 1.0
     top = h * 0.085
     block_h = line_h * len(lines) + 46 * u
     block_w = max(font.measureText(l) for l in lines) + 84 * u
