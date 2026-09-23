@@ -581,6 +581,32 @@ def _query_ladder(query: str, cfg: dict[str, Any]) -> list[str]:
     return out
 
 
+def _toon_backend(want: str):
+    """Pick a drawing backend, falling back rather than failing.
+
+    Three of them now, in descending order of what they need from the
+    machine: `gl` models the shot in 3D and needs a working OpenGL context,
+    `skia` draws it flat with real beziers and anti-aliasing, and `toon` on
+    Pillow draws the same scenes without either. A missing renderer drops to
+    the next one down with a line saying so, because a build that quietly
+    renders in the wrong style is worse than one that says what it did.
+    """
+    if want in ("gl", "3d", "toon3d"):
+        try:
+            from . import toon3d
+            return toon3d, "gl"
+        except Exception as exc:                      # no context, no moderngl
+            print(f"    toon: 3D backend unavailable ({exc}); using Skia")
+    if want != "pillow":
+        try:
+            from . import toon_skia
+            return toon_skia, "skia"
+        except ImportError:
+            print("    toon: skia-python not installed; using Pillow")
+    from . import toon
+    return toon, "pillow"
+
+
 def fetch_clip(query: str, index: int, seconds: float, cfg: dict[str, Any],
                out_dir: Path) -> Path:
     """Returns a video OR a still image; render.py handles both."""
@@ -596,19 +622,27 @@ def fetch_clip(query: str, index: int, seconds: float, cfg: dict[str, Any],
         if cached:
             return max(cached, key=lambda p: p.stat().st_mtime)
 
+    # Generated footage comes before the search and before the drawn
+    # renderer: it is the only one of the three that can put this particular
+    # animal on screen. It stands aside - rather than failing the build - if
+    # it has no key, hits its budget, or has a prompt refused, and whatever
+    # is next in `providers` picks the shot up.
+    if "veo" in cfg["visuals"]["providers"]:
+        from . import veo as veo_mod
+        try:
+            dest = veo_mod.render_clip(query, seconds, cfg,
+                                       media / f"{index:03d}.mp4")
+            print(f"    shot {index}: veo — '{query}'")
+            return dest
+        except Exception as exc:
+            print(f"    shot {index}: veo stood aside ({exc})")
+
     # Drawn animation short-circuits the search entirely: there is nothing to
     # look for, because the scene is drawn to the query.
     if "toon" in cfg["visuals"]["providers"]:
         from . import toon
-        # Skia is the better renderer (real beziers, gradients, native
-        # anti-aliasing) but Pillow stays as a fallback so the pipeline still
-        # draws on a machine where skia-python will not install.
-        try:
-            from . import toon_skia as backend
-            engine = "skia"
-        except ImportError:
-            backend = toon
-            engine = "pillow"
+        backend, engine = _toon_backend(
+            str(cfg["visuals"].get("toon_engine", "skia")).lower())
         species = toon.species_for(
             query, str(cfg["visuals"].get("toon_dog", "greydog")))
         if species != "dog" and engine == "pillow":
