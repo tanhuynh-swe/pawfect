@@ -9,8 +9,14 @@ runs on the Space's GPU; only the finished clips come back to this machine.
 
 Each scene names a photo in `source_photo` (a key of visuals.hf.photos).
 Consecutive shots of a scene that share a query share one clip of up to
-five seconds - the Space's ceiling - cut in order, so a scene plays as one
-continuous take. ZeroGPU gives a few GPU minutes a day (more with HF_TOKEN
+five seconds - the model's ceiling - cut in order.
+
+With `"continuity": "chain"` in script.json, a clip that follows another in
+the same scene starts from that clip's last frame instead of from the photo,
+so a ten-second scene plays as one unbroken take rather than two restarts
+of the same pose. A scene with `"continue": true` also picks up where the
+scene before it ended; any other scene starts fresh from its photo, which is
+where a cut belongs anyway - a new place, or the other dog. ZeroGPU gives a few GPU minutes a day (more with HF_TOKEN
 in .env), so this stops cleanly when the quota runs out; run it again later
 and it carries on from the first clip it does not have yet.
 Run `python run.py build <slug>` afterwards.
@@ -32,7 +38,11 @@ CLIP_MAX = 5.0
 
 
 def chunks(data: dict, out: Path, max_shot: float) -> list[dict]:
-    """Group each scene's shots into clips, the way build_shots will cut them."""
+    """Group each scene's shots into clips, the way build_shots will cut them.
+
+    Each clip records whether it continues the one before it (`chain`).
+    """
+    chain = data.get("continuity") == "chain"
     plan, index = [], 0
     for i, scene in enumerate(data["scenes"]):
         n = max(1, math.ceil(voice.duration(out / "audio" / f"{i:03d}.wav") / max_shot))
@@ -52,8 +62,11 @@ def chunks(data: dict, out: Path, max_shot: float) -> list[dict]:
                 q = queries.index(query)
                 photo = (photos[q] if q < len(photos)
                          else scene.get("source_photo", "front"))
+                follows = bool(last) and (last["scene"] == i or
+                                          (k == 0 and bool(scene.get("continue"))))
                 plan.append({"scene": i, "query": query, "per": per,
-                             "photo": photo, "shots": [index]})
+                             "photo": photo, "shots": [index],
+                             "chain": chain and follows})
             index += 1
     return plan
 
@@ -75,7 +88,16 @@ def model_sized(path: Path) -> str:
     return base64.b64encode(buf.getvalue()).decode()
 
 
-def on_kaggle(plan: list[dict], cfg: dict, dest: Path) -> None:
+def last_frame(clip: Path) -> Path:
+    """The final frame of `clip`, as the start image of the clip after it."""
+    still = clip.with_suffix(".last.jpg")
+    if not still.exists():
+        subprocess.run(["ffmpeg", "-v", "error", "-y", "-sseof", "-0.25", "-i", str(clip),
+                        "-update", "1", "-q:v", "2", str(still)], check=True)
+    return still
+
+
+def on_kaggle(plan: list[dict], cfg: dict, dest: Path, slug: str) -> None:
     """Every clip still missing, as one Kaggle job; its output lands in dest."""
     import base64
     import kaggle_gen
@@ -87,18 +109,29 @@ def on_kaggle(plan: list[dict], cfg: dict, dest: Path) -> None:
         if (dest / f"c{c:02d}.mp4").exists():
             continue
         seconds = min(CLIP_MAX, len(chunk["shots"]) * chunk["per"] + 0.2)
-        jobs.append({
+        job = {
             "name": f"c{c:02d}", "seed": 42 + c,
             "prompt": f"{chunk['query']} {hf['style']}",
             "image": chunk["photo"],
             # Wan wants 4k+1 frames; the Space rounds the same way.
             "frames": 4 * max(2, min(20, round(seconds * fps / 4))) + 1,
-        })
+        }
+        if chunk["chain"]:
+            prev = dest / f"c{c - 1:02d}.mp4"
+            if prev.exists():
+                # Made on an earlier run: its last frame travels as the image.
+                job["image"] = f"last_c{c - 1:02d}"
+                images[job["image"]] = model_sized(last_frame(prev))
+            else:
+                # Made earlier in this same job: wan_job hands the frame on,
+                # and falls back to the photo if that clip failed.
+                job["chain"] = True
+        jobs.append(job)
         images.setdefault(chunk["photo"], model_sized(ROOT / hf["photos"][chunk["photo"]]))
     if not jobs:
         return
     print(f"kaggle: {len(jobs)} clips from {len(images)} photos")
-    kaggle_gen.run(jobs, images, cfg, dest / "_kaggle")
+    kaggle_gen.run(jobs, images, cfg, dest / "_kaggle", kernel=f"pawfect-{slug}")
     for clip in (dest / "_kaggle").glob("c*.mp4"):
         clip.replace(dest / clip.name)
 
@@ -122,7 +155,7 @@ def main() -> None:
     dest.mkdir(exist_ok=True)
 
     if use_kaggle:
-        on_kaggle(plan, cfg, dest)
+        on_kaggle(plan, cfg, dest, slug)
 
     from gradio_client import Client, handle_file
     import httpx
@@ -134,10 +167,14 @@ def main() -> None:
         if clip.exists() or stopped or client is None:
             continue
         seconds = min(CLIP_MAX, len(chunk["shots"]) * chunk["per"] + 0.2)
+        start_image = ROOT / hf["photos"][chunk["photo"]]
+        prev = dest / f"c{c - 1:02d}.mp4"
+        if chunk["chain"] and prev.exists():
+            start_image = last_frame(prev)
         started = time.time()
         try:
             video, _ = client.predict(
-                input_image=handle_file(str(ROOT / hf["photos"][chunk["photo"]])),
+                input_image=handle_file(str(start_image)),
                 prompt=f"{chunk['query']} {hf['style']}",
                 steps=hf.get("steps", 6), duration_seconds=round(seconds, 1),
                 guidance_scale=1, guidance_scale_2=1, seed=42 + c,

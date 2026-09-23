@@ -149,11 +149,14 @@ def fit(image, max_dim=832, min_dim=480, multiple=16):
 
 
 log["stage"] = "generate"
+previous_last = None        # the last frame of the clip just made, for a chain
 for job in JOBS:
     entry = {"name": job["name"], "prompt": job["prompt"]}
     start = time.time()
     try:
-        image = fit(Image.open(io.BytesIO(base64.b64decode(IMAGES[job["image"]]))).convert("RGB"))
+        chained = bool(job.get("chain")) and previous_last is not None
+        image = (previous_last if chained else
+                 fit(Image.open(io.BytesIO(base64.b64decode(IMAGES[job["image"]]))).convert("RGB")))
         frames = pipe(
             image=image, prompt_embeds=embeds[job["name"]].to("cuda"),
             height=image.height, width=image.width, num_frames=job["frames"],
@@ -164,9 +167,17 @@ for job in JOBS:
         arr = np.asarray(frames, dtype=np.float32)
         if not np.isfinite(arr).all() or arr.mean() < 0.02:
             raise RuntimeError("blank or NaN frames - float16 overflow")
+        if chained:
+            # Frame 0 is the previous clip's last frame; showing it twice is
+            # a visible hitch at the join.
+            frames = frames[1:]
+        previous_last = Image.fromarray(
+            (np.clip(np.asarray(frames[-1], dtype=np.float32), 0, 1) * 255).round().astype(np.uint8))
+        entry["chained"] = chained
         export_to_video(frames, f"{OUT}/{job['name']}.mp4", fps=SETTINGS["fps"])
         entry["ok"] = True
     except Exception as exc:
+        previous_last = None    # the next clip starts from its photo instead
         entry["ok"] = False
         entry["error"] = f"{type(exc).__name__}: {exc}"[:800]
     entry["seconds"] = round(time.time() - start)

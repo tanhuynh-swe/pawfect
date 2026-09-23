@@ -45,7 +45,8 @@ def status(ref: str) -> str:
     return kaggle("kernels", "status", ref).lower()
 
 
-def run(jobs: list[dict], images: dict[str, str], cfg: dict, dest: Path) -> dict:
+def run(jobs: list[dict], images: dict[str, str], cfg: dict, dest: Path,
+        kernel: str = KERNEL) -> dict:
     """Push `jobs` (name, prompt, image key, frames, seed), wait, download.
 
     `images` maps each key to a base64 JPEG. Each photo travels once, however
@@ -55,7 +56,9 @@ def run(jobs: list[dict], images: dict[str, str], cfg: dict, dest: Path) -> dict
     replaced, so a sleeping Mac or a closed terminal loses nothing.
     """
     k = cfg["visuals"]["kaggle"]
-    ref = f"{username(k)}/{KERNEL}"
+    # One Kaggle script per video: a shared one let a second video wait on,
+    # and then collect, the first video's clips.
+    ref = f"{username(k)}/{kernel}"
     dest.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -88,7 +91,7 @@ def run(jobs: list[dict], images: dict[str, str], cfg: dict, dest: Path) -> dict
         build.mkdir(parents=True)
         (build / "run.py").write_text(code)
         (build / "kernel-metadata.json").write_text(json.dumps({
-            "id": ref, "title": KERNEL, "code_file": "run.py",
+            "id": ref, "title": kernel, "code_file": "run.py",
             "language": "python", "kernel_type": "script", "is_private": True,
             "enable_gpu": True, "enable_internet": True,
             "machine_shape": k.get("accelerator", "NvidiaTeslaT4"),
