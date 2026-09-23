@@ -47,11 +47,20 @@ video:
   # Captions are drawn with Pillow and composited, so this no longer depends
   # on the ffmpeg build having libass.
   burn_captions: false
+  # The per-scene on_screen_text titles, drawn over the picture on their own:
+  # burn_captions above is the running subtitle line, and this keeps the
+  # titles when that is off. Emoji in them are drawn in colour.
+  burn_banners: true
   # Drawn animation only (visuals.providers: [toon]). Pillow does not
   # anti-alias, so frames are drawn at this multiple of the output size and
   # scaled back down. 3 is clean; 2 is about twice as fast with slightly
   # softer lines; 1 disables it and the outlines come out stair-stepped.
   toon_supersample: 3
+  # Film grain over the finished drawn frame, 0-255. Flat fills across a
+  # 1080x1920 frame band under h264, and a little noise dithers the gradients
+  # and gives the illustration some tooth. 0 turns it off; above about 30 it
+  # starts to look like dirt rather than paper.
+  toon_grain: 15
 
 # Vertical format, used automatically by any script with "format": "vertical".
 # Anything not listed here falls back to the `video` block above.
@@ -68,6 +77,7 @@ shorts:
   max_shot_seconds: 4.2
   caption_size: 74          # readable on a phone at arm's length
   banner_size: 88
+  banner_top: 0.13          # titles near the top, clear of the face and of TikTok's buttons
   caption_margin_v: 380     # clear of the Shorts/TikTok UI along the bottom
   side_margin: 70
   # Kept for reference: the Vietnamese font is now chosen by render.py from
@@ -173,12 +183,27 @@ visuals:
   # its animal photographs are often wild rather than domestic, so it is last.
   # 'toon' draws each shot instead of searching for it (pipeline/toon.py).
   # Swap back to the stock list to return to footage.
-  providers: [toon]
+  providers: [veo, toon]
+  # 'veo' generates each shot with Google's video model instead of drawing or
+  # searching for it. It needs GEMINI_API_KEY in .env and it costs money per
+  # second of output, so it is capped below. Put it first to generate, and
+  # leave 'toon' after it as the fallback for anything it declines:
+  #   providers: [veo, toon]
+  # Which drawing backend `toon` uses.
+  #   gl     - pipeline/toon3d.py: the room and the animal are modelled in
+  #            3D and lit, with cel bands and an ink outline. Needs a working
+  #            OpenGL context (moderngl); falls back to skia without one.
+  #   skia   - pipeline/toon_skia.py: flat vector, drawn side-on. Still here
+  #            and still good; this is the 2D look.
+  #   pillow - pipeline/toon.py, the no-dependency fallback.
+  toon_engine: gl
   # Which dog the drawn renderer uses. 'greydog' is the channel's own dog,
-  # drawn from the reference footage: grey coat, black pricked ears, dark
-  # crown and saddle, white muzzle, tail curled over the back. 'dog' is the
-  # tan floppy-eared puppy the renderer started with. Either stays available;
-  # cat scripts are unaffected by this.
+  # drawn from the reference photograph: sable coat, black pricked ears lined
+  # with tan, a dark mask over the crown and down the bridge of the muzzle, a
+  # tan spot over each eye and a tan ring around it, cream muzzle, cheek and
+  # chest, dark saddle, tail curled over the back, and a tongue out whenever
+  # it is standing still. 'dog' is the tan floppy-eared puppy the renderer
+  # started with. Either stays available; cat scripts are unaffected by this.
   toon_dog: greydog
   # Clips checked by eye and rejected. Tags cannot catch these: the canicross
   # ones are honestly tagged "dogs, run, running" but the dog is out of frame
@@ -194,6 +219,73 @@ visuals:
     - "pixabay:2296"
     - "pixabay:77623"
 
+  veo:
+    # veo-3.1-generate-preview takes reference images; the -fast variant does
+    # not, and reference images are the whole reason this is worth using.
+    model: veo-3.1-generate-preview
+    # Vertex AI instead of the Gemini API key. The key's free tier has no Veo
+    # quota; a Google Cloud free-trial project pays from its $300 credit and
+    # never bills the card unless the account is upgraded by hand. Sign in
+    # once with `gcloud auth application-default login`. Leave project empty
+    # to fall back to GEMINI_API_KEY.
+    vertex:
+      project: ""
+      location: us-central1
+    resolution: 720p          # 1080p and 4K cost proportionally more
+    max_seconds: 8            # the model's ceiling; shots are shorter anyway
+    generate_audio: false     # the narration is ours, so do not pay for his
+    # The developer API rejects "dont_allow"; leave empty to let the model
+    # decide, or set allow_adult. People are kept out via negative_prompt.
+    person_generation: allow_adult
+    reuse_by_query: true      # shots cut from one scene share one generation
+    # Billed per second of successful output. This is the stop on a runaway
+    # build: past it the provider stands aside and 'toon' draws the rest.
+    max_clips_per_build: 1
+    # Photographs of the channel's own dog, up to three. These are what make
+    # every shot the same animal instead of a different plausible one, which
+    # is the failure both stock footage and the drawn renderer were fighting.
+    reference_images:
+      - assets/dog/IMG_4991.jpeg    # face on, ears and markings clear
+      - assets/dog/min.jpg          # three-quarter, mouth open
+    style: >-
+      Shot on a 35mm lens, shallow depth of field, warm natural light,
+      handheld, documentary footage of a real pet dog at home. No text,
+      no captions, no watermark.
+    negative_prompt: cartoon, illustration, 3d render, text, watermark, people
+
+  # Animated from real photographs of the dog on a Hugging Face Space by
+  # hf_gen.py (Wan 2.2 14B image-to-video). Free: a few ZeroGPU minutes a
+  # day, more with HF_TOKEN in .env. The photos are cropped 9:16 so the clip
+  # comes back vertical at the model's full resolution.
+  hf:
+    space: zerogpu-aoti/wan2-2-fp8da-aoti-faster
+    steps: 6
+    photos:
+      front: assets/dog/front_916.jpg   # face on, tongue out
+      side: assets/dog/side_916.jpg     # three-quarter, mouth open
+      beg: assets/dog/beg_clean.jpg     # Min on hind legs, paws up, begging (caption removed)
+      stand: assets/dog/stand_clean.jpg # Min on hind legs, looking up (caption removed)
+      mon: assets/dog/mon_clean.jpg     # Mon lying down, seen from above
+      both: assets/dog/min_mon_split.jpg  # split screen: Min above, Mon below
+    style: >-
+      Handheld phone footage of a real pet dog at home, natural light,
+      realistic fur and motion.
+
+  # The same clips as `hf` above, made on Kaggle's free GPU instead
+  # (`hf_gen.py <slug> --kaggle`): 30 GPU hours a week on a T4, and nothing
+  # downloaded here but the clips. Wan 2.2 14B image-to-video, as on the
+  # Space, but 4-bit GGUF with the Lightning distillation merged in, since
+  # the full model does not fit a T4.
+  kaggle:
+    username: tanhuynhswe     # blank: read from `kaggle config view`
+    accelerator: NvidiaTeslaT4
+    base: Wan-AI/Wan2.2-I2V-A14B-Diffusers
+    gguf_repo: Zuntan/Wan22-I2V_A14B-Lightning-GGUF
+    gguf_high: Wan22-I2V_A14B-Lightning-H-Q4_K_M.gguf
+    gguf_low: Wan22-I2V_A14B-Lightning-L-Q4_K_M.gguf
+    steps: 6
+    fps: 16
+
   # Whole-transfer budget per clip. requests' own timeout only fires between
   # reads, so without this a trickling CDN stalls the build indefinitely.
   download_timeout: 90
@@ -208,9 +300,12 @@ visuals:
   # Leave this off. Pixabay's newest-first ordering all but ignores the search
   # term — asked for a cat in a box it returns kebab cooking and glaciers.
   prefer_recent: false
-  # Skip Pixabay clips tagged "ai generated". Synthetic animals undercut a
-  # channel about what real pets do.
-  exclude_ai: true
+  # Pixabay clips tagged "ai generated" are allowed. This was true, on the
+  # grounds that synthetic animals undercut a channel about what real pets
+  # do; the channel's direction is now the opposite — generate the footage
+  # rather than find it — so filtering AI out of the stock search only
+  # removes usable shots.
+  exclude_ai: false
   # Same reasoning, for the rendered and drawn animals Pixabay files beside
   # its real footage. A cartoon bulldog next to real pets reads as clipart.
   exclude_terms: [cartoon, animation, animated, 3d, render, rendering,

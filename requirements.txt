@@ -13,6 +13,20 @@ anthropic>=0.40
 # it the pipeline falls back to pipeline/toon.py on Pillow, which draws the
 # same scenes but flatter and about three times slower.
 skia-python>=87.5
+# 3D drawn animation (visuals.toon_engine: gl). pipeline/toon3d.py models the
+# room and the animal and renders them through a standalone OpenGL context -
+# no window, no display, and on this M1 it is faster than drawing the same
+# shot flat. Without it the pipeline falls back to the 2D Skia backend.
+moderngl>=5.10
+numpy>=1.26
+# Generated footage (visuals.providers: [veo]). Google's Veo through the
+# Gemini API; needs GEMINI_API_KEY and bills per second of output.
+google-genai>=2.24
+# Free generated footage (hf_gen.py): Wan 2.2 on a Hugging Face ZeroGPU
+# Space, and the same model on Kaggle's free GPU (kaggle_gen.py).
+gradio_client>=1.0
+kaggle>=2.0
+
 # Vietnamese narration. Pulls onnxruntime and friends (~540MB of models
 # on first run); only needed if you publish Vietnamese videos.
 vieneu>=3.8

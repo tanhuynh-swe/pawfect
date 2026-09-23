@@ -131,7 +131,10 @@ def build_shots(scenes: list[dict[str, Any]], durations: list[float],
                 # The drawn renderer puts the scene's caption in the frame and
                 # varies its camera move per shot, so both travel with the
                 # request. Stock providers ignore them.
-                cfg["_shot_text"] = scene.get("on_screen_text", "") if k == 0 else ""
+                # ...unless the caption overlay burns the banners in, when
+                # drawing it in the frame as well would show it twice.
+                cfg["_shot_text"] = (scene.get("on_screen_text", "")
+                                     if k == 0 and not _banners_on(cfg) else "")
                 cfg["_shot_index"] = counter
                 clip = fetch_clip(q, counter, per, cfg, out_dir)
                 _shot(clip, dest, per, cfg, counter)
@@ -312,17 +315,104 @@ def _wrap(draw: ImageDraw.ImageDraw, text: str,
     return lines
 
 
+# Colour emoji. No text font has them, so a banner like "Tắm ❌" would draw
+# the missing-glyph box; Apple's font does, but only as bitmaps at fixed sizes
+# (160 is the largest), so each run is drawn there and scaled to the line.
+EMOJI_FONT = "/System/Library/Fonts/Apple Color Emoji.ttc"
+EMOJI_JOINERS = "\ufe0f\u200d"
+_GLYPHS: dict[tuple[str, str], bool] = {}
+
+
+def _has_glyph(font: ImageFont.FreeTypeFont, ch: str) -> bool:
+    """Whether `font` draws `ch` as itself rather than as its missing-glyph box."""
+    key = (str(font.path), ch)
+    if key not in _GLYPHS:
+        def ink(c: str) -> bytes:
+            im = Image.new("L", (font.size * 2, font.size * 2))
+            ImageDraw.Draw(im).text((0, 0), c, font=font, fill=255)
+            return im.tobytes()
+        _GLYPHS[key] = ink(ch) != ink("\U000F0000")    # private use: never present
+    return _GLYPHS[key]
+
+
+def _runs(line: str, font: ImageFont.FreeTypeFont) -> list[tuple[str, bool]]:
+    """Split a line into (text, is_emoji) runs; joiners stay with their emoji."""
+    runs: list[list] = []
+    for ch in line:
+        if ch in EMOJI_JOINERS:
+            emoji = bool(runs) and runs[-1][1]
+        else:
+            emoji = not ch.isspace() and not _has_glyph(font, ch)
+        if runs and runs[-1][1] == emoji:
+            runs[-1][0] += ch
+        else:
+            runs.append([ch, emoji])
+    return [(text, emoji) for text, emoji in runs]
+
+
+def _emoji_image(text: str, height: int) -> Image.Image | None:
+    if not Path(EMOJI_FONT).exists():
+        return None
+    font = ImageFont.truetype(EMOJI_FONT, 160)
+    im = Image.new("RGBA", (200 * len(text), 200), (0, 0, 0, 0))
+    ImageDraw.Draw(im).text((0, 0), text, font=font, embedded_color=True)
+    box = im.getbbox()
+    if not box:
+        return None
+    im = im.crop(box)
+    return im.resize((max(1, im.width * height // im.height), height),
+                     Image.LANCZOS)
+
+
 def _draw_block(draw: ImageDraw.ImageDraw, lines: list[str],
                 font: ImageFont.FreeTypeFont, centre_x: int, bottom_y: int,
                 fill: tuple[int, int, int, int],
-                outline: tuple[int, int, int, int]) -> None:
-    """Draw centred lines sitting on `bottom_y`, outlined so they read on any shot."""
+                outline: tuple[int, int, int, int],
+                image: Image.Image | None = None) -> None:
+    """Draw centred lines sitting on `bottom_y`, outlined so they read on any shot.
+
+    Given the `image` being drawn on, emoji the font lacks are pasted in
+    colour from the emoji font; without it they are left out rather than
+    drawn as boxes.
+    """
     step = int(font.size * 1.25)
+    stroke = max(3, font.size // 12)
     y = bottom_y - step * len(lines) + step // 2
     for line in lines:
-        draw.text((centre_x, y), line, font=font, fill=fill, anchor="mm",
-                  stroke_width=max(3, font.size // 12), stroke_fill=outline)
+        runs = _runs(line, font)
+        if not any(emoji for _, emoji in runs):
+            draw.text((centre_x, y), line, font=font, fill=fill, anchor="mm",
+                      stroke_width=stroke, stroke_fill=outline)
+            y += step
+            continue
+        pieces = []
+        for text, emoji in runs:
+            if not emoji:
+                pieces.append((text, None, draw.textlength(text, font=font)))
+            elif image is not None:
+                glyph = _emoji_image(text, int(font.size * 1.05))
+                if glyph is not None:
+                    pieces.append((text, glyph, glyph.width))
+        x = centre_x - sum(width for *_, width in pieces) / 2
+        for text, glyph, width in pieces:
+            if glyph is None:
+                draw.text((x, y), text, font=font, fill=fill, anchor="lm",
+                          stroke_width=stroke, stroke_fill=outline)
+            else:
+                image.alpha_composite(glyph, (int(x), int(y - glyph.height / 2)))
+            x += width
         y += step
+
+
+def _banners_on(cfg: dict[str, Any]) -> bool:
+    """Whether scenes' on_screen_text is burned in over the picture.
+
+    Its own switch, so the subtitle line can be off while the banners stay:
+    left unset it follows `burn_captions`, which is what it did before the
+    two were split.
+    """
+    v = cfg["video"]
+    return bool(v.get("burn_banners", v.get("burn_captions", True)))
 
 
 def build_caption_overlay(scenes: list[dict[str, Any]], durations: list[float],
@@ -337,7 +427,8 @@ def build_caption_overlay(scenes: list[dict[str, Any]], durations: list[float],
     exactly as long as its line is on screen, so ffmpeg reads the result as an
     ordinary video track that a single overlay composites.
     """
-    if not cfg["video"].get("burn_captions", True):
+    captions_on = bool(cfg["video"].get("burn_captions", True))
+    if not captions_on and not _banners_on(cfg):
         return None
 
     v = cfg["video"]
@@ -348,12 +439,12 @@ def build_caption_overlay(scenes: list[dict[str, Any]], durations: list[float],
     cap_font = _caption_font(v.get("caption_size", 58), language)
     ban_font = _caption_font(v.get("banner_size", 92), language)
 
-    captions = list(_caption_chunks(scenes, durations))
+    captions = list(_caption_chunks(scenes, durations)) if captions_on else []
     banners: list[tuple[float, float, str]] = []
     t = 0.0
     for scene, dur in zip(scenes, durations):
         text = (scene.get("on_screen_text") or "").strip()
-        if text:
+        if text and _banners_on(cfg):
             banners.append((t + 0.2, min(t + 3.2, t + dur), text.upper()))
         t += dur
     if t <= 0:
@@ -391,11 +482,18 @@ def build_caption_overlay(scenes: list[dict[str, Any]], durations: list[float],
             if caption:
                 _draw_block(draw, _wrap(draw, caption, cap_font, w - 2 * side),
                             cap_font, w // 2, h - margin_v,
-                            (255, 255, 255, 255), (0, 0, 0, 255))
+                            (255, 255, 255, 255), (0, 0, 0, 255), image)
             if banner:
-                _draw_block(draw, _wrap(draw, banner, ban_font, w - 2 * side),
-                            ban_font, w // 2, h - margin_v - int(cap_font.size * 3),
-                            (255, 214, 10, 255), (16, 16, 16, 255))
+                # `banner_top` pins the title near the top instead, as a
+                # fraction of the height: on a close-up the lower third is
+                # the mouth, and that is usually where the joke is.
+                top = v.get("banner_top")
+                lines = _wrap(draw, banner, ban_font, w - 2 * side)
+                bottom = (int(h * float(top)) + int(ban_font.size * 1.25) * len(lines)
+                          if top is not None
+                          else h - margin_v - int(cap_font.size * 3))
+                _draw_block(draw, lines, ban_font, w // 2, bottom,
+                            (255, 214, 10, 255), (16, 16, 16, 255), image)
             image.save(path)
             drawn[key] = path
         entries.append(f"file '{path.resolve()}'\nduration {end - start:.3f}")
