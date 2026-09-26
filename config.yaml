@@ -263,8 +263,8 @@ visuals:
     photos:
       front: assets/dog/front_916.jpg   # face on, tongue out
       side: assets/dog/side_916.jpg     # three-quarter, mouth open
-      beg: assets/dog/beg_clean.jpg     # Min on hind legs, paws up, begging (caption removed)
-      stand: assets/dog/stand_clean.jpg # Min on hind legs, looking up (caption removed)
+      beg: assets/dog/beg_nohand.jpg    # Min on hind legs, paws up, begging (caption and fingertip removed)
+      stand: assets/dog/stand_nohand.jpg # Min on hind legs, looking up (caption and fingertip removed)
       mon: assets/dog/mon_clean.jpg     # Mon lying down, seen from above
       both: assets/dog/min_mon_split.jpg  # split screen: Min above, Mon below
     style: >-
@@ -285,6 +285,31 @@ visuals:
     gguf_low: Wan22-I2V_A14B-Lightning-L-Q4_K_M.gguf
     steps: 6
     fps: 16
+
+  # The same clips from LTX-2.3 on Lightricks' own ZeroGPU Space
+  # (`hf_gen.py <slug> --ltx`). Free, draws on the same ZeroGPU quota as `hf`,
+  # and sharper: 1024x1536 against Wan's 832 px. Tested 2026-09-26 on Min's
+  # begging photo - identity and focus held for the whole clip, but only once
+  # the prompt fixed the camera and kept the dog in place; the style below
+  # is what does that. It replaces hf.style for this route.
+  ltx:
+    space: Lightricks/LTX-2-3
+    high_res: true
+    # Never name camera gear: "on a tripod" put a tripod in the room.
+    style: >-
+      Locked-off shot, the camera does not move or zoom. The dog stays in the
+      same spot, in frame and in focus. Real pet dog at home, natural light,
+      realistic fur and motion.
+
+  # Clips made by hand in Google Flow (`hf_gen.py <slug> --flow`). Flow has
+  # no API: the run writes workspace/<slug>/flow_in/SHOTLIST.md with a start
+  # frame and prompt per take, the takes are downloaded back into flow_in/,
+  # and the next run cuts them into the same hf_out/cNN.mp4 clips the Space
+  # and Kaggle make - so any of the three can fill the gaps the others left.
+  flow:
+    take_seconds: 8     # Flow's take length; chained clips up to this share one take
+    # Blank uses hf.style above.
+    style: ""
 
   # Whole-transfer budget per clip. requests' own timeout only fires between
   # reads, so without this a trickling CDN stalls the build indefinitely.

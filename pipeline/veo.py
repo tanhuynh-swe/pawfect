@@ -20,9 +20,10 @@ Two things make it usable for a channel rather than a toy:
   shots.
 
 Flow, Google's filmmaking UI, has no public API. It is the same models behind
-a different door, so clips made by hand in Flow are dropped into
-`workspace/<slug>/media/` as `000.mp4`, `001.mp4` and so on, and `fetch_clip`
-reuses them on the next build. That route needs none of this module.
+a different door, so clips made there by hand go through
+`hf_gen.py <slug> --flow`, which lists the takes to make and cuts the
+downloads into `media/`, where `fetch_clip` reuses them. That route needs
+none of this module.
 """
 from __future__ import annotations
 
