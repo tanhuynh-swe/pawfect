@@ -1,0 +1,19 @@
+{
+  "song": "In da Club 50 Cent",
+  "seconds": 30,
+  "subject": "A real chubby small dog with a grey-and-black sable coat, black mask, tan eyebrow spots, cream chest and belly and upright pointed ears, standing on its hind legs on a beige marble-tiled floor at home, facing the camera. The dog",
+  "moves": [
+    "bounces up and down on its hind legs in time to the beat, front paws paddling in the air, head bobbing forward on every beat.",
+    "keeps bouncing on its hind legs, now waving both front paws up and down in rhythm like begging for a treat, head nodding along.",
+    "sways its chubby body left and right on its hind legs, front paws pumping against its chest, head bobbing on every beat.",
+    "does small quick hops in place on its hind legs, paws paddling, ears bouncing, mouth open and panting happily.",
+    "nods its head hard to the beat like a rapper, rocking side to side on its hind legs, front paws waving.",
+    "keeps bouncing on its hind legs to the beat, front paws raised, tongue out, looking straight at the camera."
+  ],
+  "links": 12,
+  "chains": [
+    {"name": "A", "photo": "beg", "seed": 1100},
+    {"name": "B", "photo": "stand", "seed": 1200}
+  ],
+  "kernel": "pawfect-min-rap-chain"
+}

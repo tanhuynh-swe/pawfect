@@ -6,7 +6,8 @@ Veo and then refuses every request with 429, so on that route this says so
 plainly rather than calling it ready.
 """
 import sys
-sys.path.insert(0, "/Users/tanhuynh/Projects/pawfect")
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from pipeline.config import load_config, _load_dotenv
 from pipeline import veo
 

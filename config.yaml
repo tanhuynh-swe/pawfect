@@ -345,6 +345,33 @@ visuals:
   # on one of those beats has to be plain.
   sober_fallback_query: "pet dog cat"
 
+# Dance videos (`dance.py dances/<name>.json`): one continuous generated take of
+# a dog, synced to a song by easing its speed - never by cutting. The spec in
+# dances/ says what to make; these are the settings every dance shares.
+dance:
+  itunes_country: vn      # store searched for the song's official 30 s preview
+  link_frames: 49         # one Kaggle Wan link (~3 s at 16 fps; 81 frames takes ~3x as long on a T4)
+  ltx_seconds: 5          # one LTX-2.3 link (`clips --ltx`), ~150 GPU-s of ZeroGPU quota each
+  width: 1080
+  height: 1920
+  fps: 24
+  interp_fps: 48          # the take is motion-interpolated to this before the time-warp samples it
+  interp: mci             # mci (motion-compensated) or blend (plain resample, if mci warps fur)
+  speed: [0.85, 1.18]     # a real dog's bounce looks wrong played much faster or slower than this
+  loudness: -14           # LUFS, TikTok's target
+  # One light grade and fine grain over the whole take so it reads as a phone camera.
+  grade: eq=contrast=1.03:saturation=1.04,unsharp=5:5:0.4,noise=alls=4:allf=u
+  # Appended to every move. A spec may replace it with its own `style`.
+  style: >-
+    Natural real dog body mechanics: its chubby belly and fur jiggle with every
+    bounce, ears twitch, small balance wobbles on its hind feet, weight shifting,
+    mouth open and happy. A steady bouncy rhythm, about one and a half bounces
+    every second, like it is grooving to a hip-hop beat. The dog stays on the
+    same spot in the middle of the frame, alone in the frame, its whole body in
+    view from ears to hind feet, both hind feet always visible on the floor. No
+    people, no hands, no text. Static phone camera at dog height, real home
+    video, soft indoor daylight, realistic fur and motion, sharp focus.
+
 script:
   # api    = call Claude via ANTHROPIC_API_KEY (paid, but pennies per video)
   # manual = write a prompt file for you to paste into the Claude app (free)

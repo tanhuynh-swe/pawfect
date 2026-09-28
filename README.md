@@ -226,6 +226,17 @@ python run.py auto                          # the whole thing, unattended
 python run.py resume                        # clear a self-imposed pause
 ```
 
+Dance videos (a dog dancing to a song, one continuous take, no narration) have
+their own command. Each video is a spec checked in under `dances/`, so it can be
+rebuilt on any machine:
+
+```bash
+python dance.py dances/min-rap-in-da-club.json          # music -> clips -> edit, skipping what's done
+python dance.py dances/min-rap-in-da-club.json clips --ltx   # sharper LTX-2.3 links, a few per day
+python dance.py dances/min-rap-in-da-club.json edit --chain B
+python dance.py dances/min-rap-in-da-club.json sheet    # contact sheets for checking frame by frame
+```
+
 ---
 
 ## 6b. Fully unattended mode
