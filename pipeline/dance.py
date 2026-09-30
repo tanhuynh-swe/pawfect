@@ -152,12 +152,15 @@ def motion(path: Path) -> np.ndarray:
 
 
 def beat_map(m: np.ndarray, rate: float, beat: float, n_beats: int, speed: tuple[float, float],
-             skip: float = 0.0) -> np.ndarray:
+             skip: float = 0.0, anchors: dict[int, float] | None = None, slack: float = 0.2) -> np.ndarray:
     """Source frame shown at each of n_beats+1 beats, by dynamic programming.
 
     Consecutive beats are BEAT*speed apart in the source, speed within `speed`, and the speed changes only
     a little from one beat to the next, so the warp is never felt. The score is the motion at the frames
     that land on beats, after taking out the slow drift so only the rhythm counts.
+
+    `anchors` maps a beat to the source second that must show on it (within `slack` s): where a section of
+    the song starts, the link made for it starts too.
     """
     m = np.convolve(m, np.ones(5) / 5, "same")
     win = max(1, int(rate))
@@ -170,6 +173,7 @@ def beat_map(m: np.ndarray, rate: float, beat: float, n_beats: int, speed: tuple
     first = int(skip * rate)
     for s in range(first, min(n, first + int(beat * rate))):
         score[0, s, :] = m[s]
+    pinned = {k: (int((t - slack) * rate), int((t + slack) * rate)) for k, t in (anchors or {}).items() if k}
     smooth = 0.6 * m.std()
     jumps = np.arange(len(steps))
     for k in range(1, n_beats + 1):
@@ -181,10 +185,16 @@ def beat_map(m: np.ndarray, rate: float, beat: float, n_beats: int, speed: tuple
             tgt = np.arange(st, n)
             score[k, tgt, j] = vb[tgt - st] + m[tgt]
             back[k, tgt, j] = jb[tgt - st]
+        if k in pinned:
+            lo, hi = pinned[k]
+            score[k, :max(0, lo)] = neg
+            score[k, hi + 1:] = neg
     last = score[n_beats]
     s, j = np.unravel_index(last.argmax(), last.shape)
     if last[s, j] <= neg / 2:
         need = n_beats * beat * speed[0] + skip
+        if anchors:
+            raise SystemExit(f"no warp fits: each section's link must last its bars at a speed within {speed}")
         raise SystemExit(f"the take is too short: {n_beats} beats need at least {need:.1f} s of footage")
     path = [s]
     for k in range(n_beats, 0, -1):
@@ -195,7 +205,7 @@ def beat_map(m: np.ndarray, rate: float, beat: float, n_beats: int, speed: tuple
 
 
 def edit_take(clips: list[Path], grid: dict, track: Path, seconds: float, out: Path, cfg: dict,
-              skip: float = 0.0) -> dict:
+              skip: float = 0.0, anchors: dict[int, float] | None = None) -> dict:
     """Join `clips` into one take, time-warp it onto the beat, and write out.mp4, _silent and _click."""
     d = cfg["dance"]
     W, H, FPS, UP = d["width"], d["height"], d["fps"], d["interp_fps"]
@@ -221,7 +231,7 @@ def edit_take(clips: list[Path], grid: dict, track: Path, seconds: float, out: P
         # of a source frame the change that frame brought.
         r = max(1, round(UP / probe(clips[0])[2]))
         m = np.array([m[max(0, i - r + 1):i + r].max() for i in range(len(m))])
-    marks =beat_map(m, UP, beat, n_beats, tuple(d["speed"]), skip)
+    marks = beat_map(m, UP, beat, n_beats, tuple(d["speed"]), skip, anchors)
     speeds = np.diff(marks) / (beat * UP)
     on_beat = float(m[marks.astype(int)].mean() / (m.mean() + 1e-9))
 

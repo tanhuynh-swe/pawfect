@@ -2,13 +2,15 @@
 
     python dance.py dances/<name>.json            # every step that isn't done yet
     python dance.py dances/<name>.json music      # fetch the song preview, find the beat, loop it long enough
-    python dance.py dances/<name>.json clips      # generate the chains on Kaggle (waits; resumable)
+    python dance.py dances/<name>.json clips [--chain T]  # generate the chains on Kaggle (waits; resumable)
     python dance.py dances/<name>.json clips --ltx  # or add LTX-2.3 links on ZeroGPU until the quota runs out
     python dance.py dances/<name>.json edit [--chain B] [--from 0.5]
     python dance.py dances/<name>.json sheet [clip.mp4]   # contact sheets for a frame-by-frame check
 
 The spec (checked in under dances/) says what to make: the song to search on iTunes, the length, the dog's
-description, the moves and the chains. Everything generated goes to workspace/<name>/ (music/, chain/,
+description, the moves and the chains. With `sections` in place of `moves` the dance follows the song rather
+than cycling through moves: each section names how many bars it lasts, what the music does there and the move
+for it, becomes one link sized to those bars, and the edit starts each link on its section's first beat. Everything generated goes to workspace/<name>/ (music/, chain/,
 qa/, final.mp4 with _silent and _click copies), and the finished video is copied to tiktok_ready/.
 Shared settings live in config.yaml under `dance:`.
 
@@ -18,6 +20,8 @@ chains. A spec never has a script.json, so a dance slot is never queued for uplo
 """
 import json
 import shutil
+
+import numpy as np
 import sys
 from pathlib import Path
 
@@ -39,10 +43,19 @@ def prompt(spec: dict, move: str, cfg: dict) -> str:
     return f"{spec['subject'].strip()} {move.strip()} {style}"
 
 
-def links(spec: dict) -> list[str]:
-    moves = spec["moves"]
-    n = spec.get("links", len(moves))
+def links(spec: dict, ch: dict | None = None) -> list[str]:
+    moves = [s["move"] for s in spec["sections"]] if "sections" in spec else spec["moves"]
+    n = (ch or {}).get("links", spec.get("links", len(moves)))
     return [moves[i % len(moves)] for i in range(n)]
+
+
+def link_frames(spec: dict, cfg: dict, grid: dict | None) -> list[int]:
+    """Frames per link: a section's link lasts its bars at normal speed (Wan wants 4k+1 frames, and a
+    chained link loses its first, repeated frame); without sections every link is `dance.link_frames`."""
+    if "sections" not in spec:
+        return [int(cfg["dance"]["link_frames"])] * len(links(spec))
+    fps = float(cfg["visuals"]["kaggle"]["fps"])
+    return [4 * round(s["bars"] * 4 * grid["beat"] * fps / 4) + 1 for s in spec["sections"]]
 
 
 def clip_path(dest: Path, chain: str, i: int) -> Path:
@@ -66,7 +79,7 @@ def step_music(spec: dict, cfg: dict, out: Path) -> dict:
     return grid
 
 
-def step_clips_kaggle(spec: dict, cfg: dict, out: Path) -> None:
+def step_clips_kaggle(spec: dict, cfg: dict, out: Path, grid: dict | None = None, only: str | None = None) -> None:
     """Each chain is its own Kaggle job, so two chains generate at once (Kaggle runs two GPU sessions).
 
     A chain with `"anchor": {"soften": 0.7}` resets each link's start frame to the real photo's tone and
@@ -77,17 +90,18 @@ def step_clips_kaggle(spec: dict, cfg: dict, out: Path) -> None:
     import hf_gen
     import kaggle_gen
 
-    frames = int(cfg["dance"]["link_frames"])
+    frames = link_frames(spec, cfg, grid)
     base = spec.get("kernel", f"pawfect-{out.name}")
-    todo = [ch for ch in spec["chains"] if len(chain_clips(spec, out, ch["name"])) < len(links(spec))]
+    todo = [ch for ch in spec["chains"] if len(chain_clips(spec, out, ch["name"])) < len(links(spec, ch))
+            and only in (None, ch["name"])]
     if not todo:
         print("clips: all chains are here")
         return
 
     def one(ch: dict) -> None:
         jobs = [{"name": f"{ch['name']}{i}", "seed": ch["seed"] + i, "prompt": prompt(spec, move, cfg),
-                 "image": ch["photo"], "frames": frames, "chain": i > 0, "anchor": ch.get("anchor")}
-                for i, move in enumerate(links(spec))]
+                 "image": ch["photo"], "frames": frames[i], "chain": i > 0, "anchor": ch.get("anchor")}
+                for i, move in enumerate(links(spec, ch))]
         images = {ch["photo"]: hf_gen.model_sized(ROOT / cfg["visuals"]["hf"]["photos"][ch["photo"]])}
         kaggle_gen.run(jobs, images, cfg, out / "chain" / ch["name"], kernel=f"{base}-{ch['name'].lower()}")
 
@@ -95,8 +109,32 @@ def step_clips_kaggle(spec: dict, cfg: dict, out: Path) -> None:
         list(pool.map(one, todo))
 
 
-def step_clips_ltx(spec: dict, cfg: dict, out: Path) -> None:
-    """Add links on Lightricks' LTX-2.3 Space, chain by chain, until done or out of ZeroGPU quota."""
+def flf_clip(client, first: Path, last: Path, prompt_text: str, seconds: float, cfg: dict, seed: int,
+             audio: Path | None = None):
+    """One LTX-2.3 clip that starts on `first` and ends on `last` (visuals.ltx.flf_space).
+
+    With `audio`, the section's own stretch of the song goes in as the clip's soundtrack, so the model
+    moves the dog to that music rather than to a rhythm it imagines."""
+    from gradio_client import handle_file
+
+    ltx = cfg["visuals"].get("ltx") or {}
+    style = (ltx.get("style") or "").strip()
+    a, b = handle_file(str(first)), handle_file(str(last))
+    width, height = client.predict(a, b, bool(ltx.get("high_res", True)), api_name="/on_image_upload")
+    size = [v["value"] if isinstance(v, dict) else v for v in (width, height)]
+    return client.predict(
+        first_image=a, last_image=b, input_audio=handle_file(str(audio)) if audio else None,
+        prompt=f"{prompt_text} {style}".strip(), duration=round(seconds, 1), enhance_prompt=False,
+        seed=seed, randomize_seed=False, width=int(size[0]), height=int(size[1]), api_name="/generate_video")
+
+
+def step_clips_ltx(spec: dict, cfg: dict, out: Path, grid: dict | None = None, only: str | None = None) -> None:
+    """Add links on Lightricks' LTX-2.3 Space, chain by chain, until done or out of ZeroGPU quota.
+
+    A chained link starts from the last frame of the one before, and LTX drifts on the first join (quilted
+    fur, a harness where the orange spot was). With `home` in the spec, each link is made instead on the
+    first/last-frame Space from the home frame back to the home frame: the links meet on the same picture
+    and nothing is handed down to compound. A section with `clip` uses that footage, up to `to_frame`."""
     import os
     import hf_gen
     import httpx
@@ -106,18 +144,44 @@ def step_clips_ltx(spec: dict, cfg: dict, out: Path) -> None:
     dest.mkdir(parents=True, exist_ok=True)
     client = Client((cfg["visuals"].get("ltx") or {}).get("space", "Lightricks/LTX-2-3"), verbose=False,
                     token=os.environ.get("HF_TOKEN") or None, httpx_kwargs={"timeout": httpx.Timeout(120.0)})
-    seconds = float(cfg["dance"]["ltx_seconds"])
+    home = ROOT / spec["home"] if spec.get("home") else None
+    flf = None
+    starts = np.cumsum([0] + [s["bars"] * 4 * grid["beat"] for s in spec.get("sections", [])])
     for ch in spec["chains"]:
-        for i, move in enumerate(links(spec)):
+        if only not in (None, ch["name"]):
+            continue
+        for i, move in enumerate(links(spec, ch)):
+            sec = spec["sections"][i] if "sections" in spec else {}
+            if sec.get("clip") and not clip_path(dest, ch["name"], i).exists():
+                cut = f"select=lte(n\\,{int(sec['to_frame'])})" if "to_frame" in sec else "null"
+                dance.run("ffmpeg", "-v", "error", "-y", "-i", ROOT / sec["clip"], "-vf", f"{cut},setpts=N/FRAME_RATE/TB",
+                          "-an", "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", clip_path(dest, ch["name"], i))
+                continue
+            # A section's link lasts its bars; otherwise every link is `dance.ltx_seconds`.
+            seconds = (spec["sections"][i]["bars"] * 4 * grid["beat"] if "sections" in spec
+                       else float(cfg["dance"]["ltx_seconds"]))
             clip = clip_path(dest, ch["name"], i)
             if clip.exists():
                 continue
-            start = (ROOT / cfg["visuals"]["hf"]["photos"][ch["photo"]] if i == 0
-                     else hf_gen.last_frame(clip_path(dest, ch["name"], i - 1)))
             print(f"  {clip.name}: {move[:60]}...")
             try:
-                video, _ = hf_gen.ltx_clip(client, start, {"query": prompt(spec, move, cfg)}, seconds, cfg,
-                                           seed=ch["seed"] + i)
+                if home:
+                    if flf is None:
+                        flf = Client(cfg["visuals"]["ltx"]["flf_space"], verbose=False,
+                                     token=os.environ.get("HF_TOKEN") or None,
+                                     httpx_kwargs={"timeout": httpx.Timeout(120.0)})
+                    audio = None
+                    if spec.get("audio"):
+                        audio = dest / f"{clip.stem}.audio.wav"
+                        dance.run("ffmpeg", "-v", "error", "-y", "-ss", f"{starts[i]:.4f}", "-t", f"{seconds:.4f}",
+                                  "-i", out / "music" / "track.wav", audio)
+                    video, _ = flf_clip(flf, home, home, prompt(spec, move, cfg), seconds + 1 / 24, cfg,
+                                        ch["seed"] + i, audio)
+                else:
+                    start = (ROOT / cfg["visuals"]["hf"]["photos"][ch["photo"]] if i == 0
+                             else hf_gen.last_frame(clip_path(dest, ch["name"], i - 1)))
+                    video, _ = hf_gen.ltx_clip(client, start, {"query": prompt(spec, move, cfg)}, seconds, cfg,
+                                               seed=ch["seed"] + i)
             except Exception as exc:              # quota, a busy Space: stop, the next run carries on here
                 print(f"  stopped: {str(exc)[:200]}")
                 return
@@ -131,8 +195,9 @@ def step_clips_ltx(spec: dict, cfg: dict, out: Path) -> None:
 
 def chain_clips(spec: dict, out: Path, name: str) -> list[Path]:
     # chain/<name>/ (one Kaggle job per chain), chain/ (older runs: all chains in one job), chain_ltx/
+    ch = next((c for c in spec["chains"] if c["name"] == name), None)
     for folder in (out / "chain" / name, out / "chain", out / "chain_ltx"):
-        clips = [clip_path(folder, name, i) for i in range(len(links(spec)))]
+        clips = [clip_path(folder, name, i) for i in range(len(links(spec, ch)))]
         if clips[0].exists():
             have = [c for c in clips if c.exists()]
             return have[:next((i for i, c in enumerate(clips) if not c.exists()), len(clips))]
@@ -148,7 +213,16 @@ def step_edit(spec: dict, cfg: dict, out: Path, grid: dict, chain: str | None, s
         raise SystemExit(f"no clips for chain {name} yet - run the clips step")
     cfg = {**cfg, "dance": {**cfg["dance"], **spec.get("edit", {})}}
     final = out / "final.mp4"
-    report = dance.edit_take(clips, grid, out / "music" / "track.wav", float(spec["seconds"]), final, cfg, skip)
+    # Sections: link i starts on the first beat of section i, so each move plays over its part of the song.
+    anchors = {}
+    if "sections" in spec:
+        beat_at, t = 0, 0.0
+        for sec, clip in zip(spec["sections"], clips):
+            anchors[beat_at] = t
+            beat_at += 4 * sec["bars"]
+            t += dance.probe(clip)[3]
+    report = dance.edit_take(clips, grid, out / "music" / "track.wav", float(spec["seconds"]), final, cfg, skip,
+                             anchors)
     print(f"edit: chain {name} ({len(clips)} clips) -> {json.dumps(report)}")
     ready = ROOT / "tiktok_ready"
     ready.mkdir(exist_ok=True)
@@ -174,9 +248,12 @@ def main() -> None:
     cfg = load_config()
     out = slot_dir(slug)
 
-    grid = step_music(spec, cfg, out) if step in ("all", "music", "edit") else None
+    grid = step_music(spec, cfg, out) if step in ("all", "music", "clips", "edit") else None
     if step in ("all", "clips"):
-        (step_clips_ltx if "--ltx" in args else step_clips_kaggle)(spec, cfg, out)
+        if "--ltx" in args:
+            step_clips_ltx(spec, cfg, out, grid, opt("--chain"))
+        else:
+            step_clips_kaggle(spec, cfg, out, grid, opt("--chain"))
     if step in ("all", "edit"):
         final = step_edit(spec, cfg, out, grid, opt("--chain"), float(opt("--from", 0)))
         step_sheet(out, [final])

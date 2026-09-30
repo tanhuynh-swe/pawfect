@@ -295,6 +295,8 @@ visuals:
   # is what does that. It replaces hf.style for this route.
   ltx:
     space: Lightricks/LTX-2-3
+    # The same model with a first and a last frame (dance.py, a spec with `home`).
+    flf_space: linoyts/LTX-2-3-First-Last-Frame
     high_res: true
     # Never name camera gear: "on a tripod" put a tripod in the room.
     style: >-

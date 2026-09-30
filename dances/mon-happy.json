@@ -1,0 +1,63 @@
+{
+  "song": "Happy Pharrell Williams",
+  "seconds": 28.5,
+  "subject": "Mon, a real small fluffy white bichon frise dog, female, with a round fluffy WHITE head and a white face, black button eyes and a black nose. Only her two floppy ears hanging at the sides of her head are dyed royal blue; her pom-pom tail is dyed blue, and she has one small orange spot on her back. Her fluffy belly is smooth white fur. She is alone on a light wooden floor at home, filmed from slightly above. She",
+  "sections": [
+    {
+      "bars": 3,
+      "music": "0-4.5 s: the groove starts, handclaps every other beat",
+      "move": "gets up from lying down, runs to the middle of the floor, turns to face the camera and stands up on her hind legs (made once on LTX, assets/dog/gen/mon_rise.mp4).",
+      "clip": "assets/dog/gen/mon_rise.mp4",
+      "to_frame": 100
+    },
+    {
+      "bars": 3,
+      "music": "4.5-9 s: verse groove, a clap every 0.75 s, kick on every bar",
+      "move": "bounces up and down on her hind legs on every clap, her hind feet hopping on the spot, front paws tucked against her fluffy chest, blue ears bouncing."
+    },
+    {
+      "bars": 2,
+      "music": "9-12 s: the phrase ends and the vocal stops for a bar",
+      "move": "hops her hind feet to the left, then to the right, then stops dead and holds still on her hind legs, front paws up, looking straight at the camera."
+    },
+    {
+      "bars": 3,
+      "music": "12-16.5 s: second phrase, the drums hit hardest",
+      "move": "steps her hind feet quickly one after the other on the spot like a little march, bouncing, and pats her front paws together like clapping, her blue tail wagging."
+    },
+    {
+      "bars": 2,
+      "music": "16.5-19.5 s: turnaround",
+      "move": "turns in a small circle on her hind legs, hopping round, and comes back to face the camera, her blue ears swinging out."
+    },
+    {
+      "bars": 3,
+      "music": "19.5-24 s: builds, then a bar's pause before the chorus",
+      "move": "bounces higher and higher on her hind legs, then dips down low on all four paws, ready to spring, and springs back up onto her hind legs."
+    },
+    {
+      "bars": 3,
+      "music": "24-28.5 s: the chorus, the loudest and happiest part",
+      "move": "springs up and jumps for joy again and again on her hind legs, both hind feet leaving the floor, front paws waving high, blue ears flying, blue tail wagging, mouth open and happy."
+    }
+  ],
+  "style": "Real dog body mechanics: her hind legs do the dancing and keep moving, her fluffy white coat bouncing with every hop. A happy, bouncy rhythm, about one bounce every three quarters of a second. Her whole body stays in view from her blue ears to her hind paws, in the middle of the frame, facing the camera. She is alone in the frame, no people, no hands, no text. Static phone camera, real home video, soft indoor daylight, realistic fluffy fur and motion, sharp focus.",
+  "chains": [
+    {
+      "name": "T",
+      "photo": "mon",
+      "seed": 3100,
+      "links": 2,
+      "note": "chained LTX test 2026-09-30: link 2 drifted (quilted fur, harness) - replaced by the home-frame route"
+    },
+    {
+      "name": "B",
+      "photo": "mon",
+      "seed": 3200
+    }
+  ],
+  "kernel": "pawfect-mon-happy",
+  "use_chain": "B",
+  "home": "assets/dog/gen/mon_up.jpg",
+  "audio": true
+}
