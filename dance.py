@@ -67,22 +67,32 @@ def step_music(spec: dict, cfg: dict, out: Path) -> dict:
 
 
 def step_clips_kaggle(spec: dict, cfg: dict, out: Path) -> None:
+    """Each chain is its own Kaggle job, so two chains generate at once (Kaggle runs two GPU sessions).
+
+    A chain with `"anchor": {"soften": 0.7}` resets each link's start frame to the real photo's tone and
+    takes the edge off the sharpening before it goes back in - without it, a chain of a dozen links drifts
+    to a painted look (kaggle/wan_job.py, `anchored`).
+    """
+    from concurrent.futures import ThreadPoolExecutor
     import hf_gen
     import kaggle_gen
 
-    dest = out / "chain"
     frames = int(cfg["dance"]["link_frames"])
-    jobs, photos = [], {}
-    for ch in spec["chains"]:
-        photos[ch["photo"]] = ROOT / cfg["visuals"]["hf"]["photos"][ch["photo"]]
-        for i, move in enumerate(links(spec)):
-            jobs.append({"name": f"{ch['name']}{i}", "seed": ch["seed"] + i, "prompt": prompt(spec, move, cfg),
-                         "image": ch["photo"], "frames": frames, "chain": i > 0})
-    if all(clip_path(dest, ch["name"], len(links(spec)) - 1).exists() for ch in spec["chains"]):
+    base = spec.get("kernel", f"pawfect-{out.name}")
+    todo = [ch for ch in spec["chains"] if len(chain_clips(spec, out, ch["name"])) < len(links(spec))]
+    if not todo:
         print("clips: all chains are here")
         return
-    images = {key: hf_gen.model_sized(p) for key, p in photos.items()}
-    kaggle_gen.run(jobs, images, cfg, dest, kernel=spec.get("kernel", f"pawfect-{out.name}"))
+
+    def one(ch: dict) -> None:
+        jobs = [{"name": f"{ch['name']}{i}", "seed": ch["seed"] + i, "prompt": prompt(spec, move, cfg),
+                 "image": ch["photo"], "frames": frames, "chain": i > 0, "anchor": ch.get("anchor")}
+                for i, move in enumerate(links(spec))]
+        images = {ch["photo"]: hf_gen.model_sized(ROOT / cfg["visuals"]["hf"]["photos"][ch["photo"]])}
+        kaggle_gen.run(jobs, images, cfg, out / "chain" / ch["name"], kernel=f"{base}-{ch['name'].lower()}")
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        list(pool.map(one, todo))
 
 
 def step_clips_ltx(spec: dict, cfg: dict, out: Path) -> None:
@@ -120,8 +130,9 @@ def step_clips_ltx(spec: dict, cfg: dict, out: Path) -> None:
 
 
 def chain_clips(spec: dict, out: Path, name: str) -> list[Path]:
-    for folder in ("chain", "chain_ltx"):
-        clips = [clip_path(out / folder, name, i) for i in range(len(links(spec)))]
+    # chain/<name>/ (one Kaggle job per chain), chain/ (older runs: all chains in one job), chain_ltx/
+    for folder in (out / "chain" / name, out / "chain", out / "chain_ltx"):
+        clips = [clip_path(folder, name, i) for i in range(len(links(spec)))]
         if clips[0].exists():
             have = [c for c in clips if c.exists()]
             return have[:next((i for i, c in enumerate(clips) if not c.exists()), len(clips))]
@@ -130,9 +141,12 @@ def chain_clips(spec: dict, out: Path, name: str) -> list[Path]:
 
 def step_edit(spec: dict, cfg: dict, out: Path, grid: dict, chain: str | None, skip: float) -> Path:
     name = chain or spec.get("use_chain") or spec["chains"][0]["name"]
-    clips = chain_clips(spec, out, name)
+    # `use_links` stops the take before a chain's late links drift; `edit` in the spec overrides `dance:`
+    # settings (speed, interp) for this video only.
+    clips = chain_clips(spec, out, name)[:spec.get("use_links")]
     if not clips:
         raise SystemExit(f"no clips for chain {name} yet - run the clips step")
+    cfg = {**cfg, "dance": {**cfg["dance"], **spec.get("edit", {})}}
     final = out / "final.mp4"
     report = dance.edit_take(clips, grid, out / "music" / "track.wav", float(spec["seconds"]), final, cfg, skip)
     print(f"edit: chain {name} ({len(clips)} clips) -> {json.dumps(report)}")

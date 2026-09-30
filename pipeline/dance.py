@@ -216,9 +216,30 @@ def edit_take(clips: list[Path], grid: dict, track: Path, seconds: float, out: P
     w, h, _, dur = probe(take)
 
     m = motion(take)
-    marks = beat_map(m, UP, beat, n_beats, tuple(d["speed"]), skip)
+    if d.get("interp") == "blend":
+        # Repeated frames read as a spike then zeros, which hides the moves from beat_map: give every copy
+        # of a source frame the change that frame brought.
+        r = max(1, round(UP / probe(clips[0])[2]))
+        m = np.array([m[max(0, i - r + 1):i + r].max() for i in range(len(m))])
+    marks =beat_map(m, UP, beat, n_beats, tuple(d["speed"]), skip)
     speeds = np.diff(marks) / (beat * UP)
     on_beat = float(m[marks.astype(int)].mean() / (m.mean() + 1e-9))
+
+    # Tone lock: every frame's colour mean and spread pulled back to the opening second's (the take's most
+    # faithful stretch, straight from the photo). A chain still hands a small tone step from link to link and
+    # can creep in contrast; per-frame stats, lightly smoothed, take both out without touching the motion.
+    lock = None
+    if d.get("tone_lock"):
+        sw, sh = 96, int(96 * h / w)
+        raw = run("ffmpeg", "-v", "error", "-i", take, "-vf", f"scale={sw}:{sh}", "-f", "rawvideo",
+                  "-pix_fmt", "rgb24", "-", capture_output=True).stdout
+        fr = np.frombuffer(raw, np.uint8).reshape(-1, sh * sw, 3).astype(np.float32)
+        mean, std = fr.mean(1), fr.std(1)
+        k = max(1, int(UP * 0.1)) | 1
+        smooth = lambda a: np.stack([np.convolve(np.pad(a[:, c], k // 2, mode="edge"), np.ones(k) / k, "valid")
+                                     for c in range(3)], 1)
+        mean, std = smooth(mean), smooth(std)
+        lock = (mean, std, mean[:UP].mean(0), std[:UP].mean(0))
 
     n_out = int(round(total * FPS))
     src = np.interp(np.arange(n_out) / FPS / beat, np.arange(n_beats + 1), marks)
@@ -237,7 +258,13 @@ def edit_take(clips: list[Path], grid: dict, track: Path, seconds: float, out: P
         while cur < want:
             frame = dec.stdout.read(size)
             cur += 1
-        enc.stdin.write(frame)
+        if lock is None:
+            enc.stdin.write(frame)
+        else:
+            mean, std, ref_mean, ref_std = lock
+            f = np.frombuffer(frame, np.uint8).reshape(h, w, 3).astype(np.float32)
+            f = (f - mean[want]) * (ref_std / (std[want] + 1e-6)) + ref_mean
+            enc.stdin.write(np.clip(f, 0, 255).round().astype(np.uint8).tobytes())
     enc.stdin.close()
     enc.wait()
     dec.kill()

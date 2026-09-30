@@ -1,19 +1,47 @@
 {
   "song": "In da Club 50 Cent",
   "seconds": 30,
-  "subject": "A real chubby small dog with a grey-and-black sable coat, black mask, tan eyebrow spots, cream chest and belly and upright pointed ears, standing on its hind legs on a beige marble-tiled floor at home, facing the camera. The dog",
+  "subject": "A real very chubby, short-legged small female dog with a round face, big round dark eyes, a grey-and-black sable coat, a dark mask with tan cheek and eyebrow spots, and pointed ears set wide apart. Her chest and belly are bright white, smooth and round, exactly as in the photo. Seen from slightly above, as filmed by a person standing over her, on a beige marble-tiled floor at home. She",
   "moves": [
-    "bounces up and down on its hind legs in time to the beat, front paws paddling in the air, head bobbing forward on every beat.",
-    "keeps bouncing on its hind legs, now waving both front paws up and down in rhythm like begging for a treat, head nodding along.",
-    "sways its chubby body left and right on its hind legs, front paws pumping against its chest, head bobbing on every beat.",
-    "does small quick hops in place on its hind legs, paws paddling, ears bouncing, mouth open and panting happily.",
-    "nods its head hard to the beat like a rapper, rocking side to side on its hind legs, front paws waving.",
-    "keeps bouncing on its hind legs to the beat, front paws raised, tongue out, looking straight at the camera."
+    "bounces on her short hind legs, popping up and down on every beat, both front paws tucked against her white chest, head tilting.",
+    "hops her hind feet from side to side, left then right, her round body swaying with each hop, front paws pumping up and down.",
+    "tilts her head to one side then the other on the beat while bouncing on her hind legs, ears flicking, mouth open and happy.",
+    "drops down onto all four paws, then springs straight back up onto her hind legs and paddles both front paws in the air.",
+    "hops in a small quarter turn on her hind legs and back to face the camera, front paws waving, her white belly jiggling.",
+    "bounces faster on her hind legs, both hind feet leaving the floor, front paws batting the air like a boxer, head bobbing.",
+    "sways her whole chubby body left and right on her hind legs like she is grooving, front paws tucked, head nodding hard on the beat.",
+    "turns once in a small circle on all four paws, then pops back up onto her hind legs facing the camera, front paws up.",
+    "stamps her hind feet one after the other on the beat, rocking her shoulders, front paws pumping, tongue out.",
+    "bounces on her hind legs and tilts her head on every beat, then paddles both front paws high in the air.",
+    "hops her hind feet from side to side, left then right, front paws waving, mouth open and happy.",
+    "gives three big bounces on her hind legs, then holds still upright with both front paws tucked, looking straight up at the camera."
   ],
-  "links": 12,
+  "style": "Real dog body mechanics: her short hind legs do the dancing and keep moving the whole time, her round belly and fur jiggling, ears bouncing. A lively hip-hop rhythm, about three bounces every two seconds. Her whole body stays in view from ears to hind paws, in the middle of the frame. She is alone in the frame, no people, no hands, no text. Static phone camera held above her, real home video, soft indoor light, realistic fur and motion, sharp focus.",
   "chains": [
-    {"name": "A", "photo": "beg", "seed": 1100},
-    {"name": "B", "photo": "stand", "seed": 1200}
+    {
+      "name": "G",
+      "photo": "beg_real",
+      "seed": 2100,
+      "anchor": {
+        "soften": 0.6
+      }
+    },
+    {
+      "name": "H",
+      "photo": "beg_real",
+      "seed": 2200,
+      "anchor": {
+        "soften": 0.6
+      }
+    }
   ],
-  "kernel": "pawfect-min-rap-chain"
+  "kernel": "pawfect-min-rap-chain",
+  "use_chain": "G",
+  "edit": {
+    "speed": [
+      0.8,
+      1.18
+    ],
+    "interp": "mci"
+  }
 }

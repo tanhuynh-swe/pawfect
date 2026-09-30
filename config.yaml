@@ -265,6 +265,7 @@ visuals:
       side: assets/dog/side_916.jpg     # three-quarter, mouth open
       beg: assets/dog/beg_nohand.jpg    # Min on hind legs, paws up, begging (caption and fingertip removed)
       stand: assets/dog/stand_nohand.jpg # Min on hind legs, looking up (caption and fingertip removed)
+      beg_real: assets/dog/min_beg_real.png # Min upright begging, from her own TikTok video (hand painted out); truest likeness
       mon: assets/dog/mon_clean.jpg     # Mon lying down, seen from above
       both: assets/dog/min_mon_split.jpg  # split screen: Min above, Mon below
     style: >-
@@ -357,6 +358,7 @@ dance:
   fps: 24
   interp_fps: 48          # the take is motion-interpolated to this before the time-warp samples it
   interp: mci             # mci (motion-compensated) or blend (plain resample, if mci warps fur)
+  tone_lock: true          # hold every frame to the opening second's colour and contrast (hides link-to-link drift)
   speed: [0.85, 1.18]     # a real dog's bounce looks wrong played much faster or slower than this
   loudness: -14           # LUFS, TikTok's target
   # One light grade and fine grain over the whole take so it reads as a phone camera.

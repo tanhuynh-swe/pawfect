@@ -148,6 +148,23 @@ def fit(image, max_dim=832, min_dim=480, multiple=16):
     return image.resize((tw, th), Image.LANCZOS)
 
 
+def anchored(frame, ref, soften):
+    """`frame` with the tone of `ref` put back, a little softened.
+
+    A chain feeds each clip's last frame to the next. Every clip comes out a
+    touch sharper and more contrasty than it went in, and over a dozen links
+    that compounds: by 30 s the dog looks painted. Matching the start frame's
+    colour statistics to the real photo's and taking the edge off the
+    sharpening before it goes back in stops the build-up at every link.
+    """
+    from PIL import ImageFilter
+    a = np.asarray(frame, np.float32)
+    r = np.asarray(ref.resize(frame.size, Image.LANCZOS), np.float32)
+    a = (a - a.mean((0, 1))) / (a.std((0, 1)) + 1e-6) * r.std((0, 1)) + r.mean((0, 1))
+    out = Image.fromarray(np.clip(a, 0, 255).round().astype(np.uint8))
+    return out.filter(ImageFilter.GaussianBlur(soften)) if soften else out
+
+
 log["stage"] = "generate"
 previous_last = None        # the last frame of the clip just made, for a chain
 for job in JOBS:
@@ -155,8 +172,10 @@ for job in JOBS:
     start = time.time()
     try:
         chained = bool(job.get("chain")) and previous_last is not None
-        image = (previous_last if chained else
-                 fit(Image.open(io.BytesIO(base64.b64decode(IMAGES[job["image"]]))).convert("RGB")))
+        photo = fit(Image.open(io.BytesIO(base64.b64decode(IMAGES[job["image"]]))).convert("RGB"))
+        image = previous_last if chained else photo
+        if chained and job.get("anchor"):
+            image = anchored(image, photo, float(job["anchor"].get("soften", 0.0)))
         frames = pipe(
             image=image, prompt_embeds=embeds[job["name"]].to("cuda"),
             height=image.height, width=image.width, num_frames=job["frames"],
