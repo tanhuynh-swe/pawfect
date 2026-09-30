@@ -374,6 +374,11 @@ dance:
     people, no hands, no text. Static phone camera at dog height, real home
     video, soft indoor daylight, realistic fur and motion, sharp focus.
 
+# inpaint.py: paints burned-in captions out of the channel's own footage.
+inpaint:
+  model: ~/.cache/lama/lama_fp32.onnx
+  model_url: https://huggingface.co/Carve/LaMa-ONNX/resolve/main/lama_fp32.onnx
+
 script:
   # api    = call Claude via ANTHROPIC_API_KEY (paid, but pennies per video)
   # manual = write a prompt file for you to paste into the Claude app (free)
